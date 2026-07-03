@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm';
 
-export const QUATERNIUS_ANIMATIONS = [
+export const UAL2_ANIMATIONS = [
   'A_TPose', 'Chest_Open', 'ClimbUp_1m', 'Consume', 'Farm_Harvest', 'Farm_PlantSeed', 'Farm_Watering',
   'Hit_Knockback', 'Idle_FoldArms_Loop', 'Idle_Lantern_Loop', 'Idle_No_Loop', 'Idle_Rail_Call',
   'Idle_Rail_Loop', 'Idle_Shield_Break', 'Idle_Shield_Loop', 'Idle_TalkingPhone_Loop', 'LayToIdle',
@@ -13,7 +13,25 @@ export const QUATERNIUS_ANIMATIONS = [
   'Zombie_Walk_Fwd_Loop'
 ] as const;
 
-export type QuaterniusAnimationName = typeof QUATERNIUS_ANIMATIONS[number];
+export const UAL1_ANIMATIONS = [
+  'A_TPose', 'Crouch_Fwd_Loop', 'Crouch_Idle_Loop', 'Dance_Loop', 'Death01', 'Driving_Loop',
+  'Fixing_Kneeling', 'Hit_Chest', 'Hit_Head', 'Idle_Loop', 'Idle_Talking_Loop', 'Idle_Torch_Loop',
+  'Interact', 'Jog_Fwd_Loop', 'Jump_Land', 'Jump_Loop', 'Jump_Start', 'PickUp_Table',
+  'Pistol_Aim_Down', 'Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Idle_Loop', 'Pistol_Reload',
+  'Pistol_Shoot', 'Punch_Cross', 'Punch_Jab', 'Push_Loop', 'Roll', 'Sitting_Enter', 'Sitting_Exit',
+  'Sitting_Idle_Loop', 'Sitting_Talking_Loop', 'Spell_Simple_Enter', 'Spell_Simple_Exit',
+  'Spell_Simple_Idle_Loop', 'Spell_Simple_Shoot', 'Sprint_Loop', 'Swim_Fwd_Loop', 'Swim_Idle_Loop',
+  'Sword_Attack', 'Sword_Idle', 'Walk_Formal_Loop', 'Walk_Loop'
+] as const;
+
+export const QUATERNIUS_LIBRARIES = [
+  { id: 'ual1', label: 'Universal Animation Library 1', animations: UAL1_ANIMATIONS },
+  { id: 'ual2', label: 'Universal Animation Library 2', animations: UAL2_ANIMATIONS }
+] as const;
+
+export type QuaterniusLibraryId = typeof QUATERNIUS_LIBRARIES[number]['id'];
+export type QuaterniusAnimationName = typeof UAL1_ANIMATIONS[number] | typeof UAL2_ANIMATIONS[number];
+export type QuaterniusAnimationId = `${QuaterniusLibraryId}:${QuaterniusAnimationName}`;
 
 const BONE_MAP: ReadonlyArray<readonly [string, VRMHumanBoneName]> = [
   ['pelvis', 'hips'], ['spine_01', 'spine'], ['spine_02', 'chest'], ['spine_03', 'upperChest'],
