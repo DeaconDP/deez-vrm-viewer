@@ -167,9 +167,9 @@ function BakePanel({ model, source, bake, mergeMeshes, onMergeMeshes, onBake, on
     <div class={`compatibility ${eligible ? 'ok' : ''}`}><span class="status-dot" /><div><b>{eligible ? 'Local VRM ready' : model ? 'This source is view-only' : 'Open a local VRM first'}</b><small>{eligible ? 'The source file is read-only and will never be overwritten.' : 'Beta baking requires a binary .vrm chosen from this device.'}</small></div></div>
 
     <div class="process-block">
-      <span class="process-number">1</span><div class="process-copy"><b>What this repairs</b><p>The rest shape is frozen into each skinned mesh and its bind poses are rebuilt. This can stop clothing, hair, or body pieces separating when a broken avatar moves.</p></div>
+      <span class="process-number">1</span><div class="process-copy"><b>What this repairs</b><p>The rest shape and bind poses are rebuilt. Duplicate hair or clothing armatures are conservatively reconnected when they contain a matching humanoid bone chain.</p></div>
       <div class="bake-note"><Info /><span><b>{mergeMeshes ? 'Compatible meshes will be merged.' : 'Meshes will stay separate.'}</b> Materials, expressions, textures, the humanoid rig, spring bones, and VRM metadata are preserved.</span></div>
-      <label class="check-row bake-merge"><input type="checkbox" checked={mergeMeshes} disabled={busy} onChange={e => onMergeMeshes(e.currentTarget.checked)} /><span><b>Merge compatible meshes</b><small>Joins same-material geometry sharing a skin. Different materials plus expression, morph, animated, or custom-extension meshes remain separate.</small></span></label>
+      <label class="check-row bake-merge"><input type="checkbox" checked={mergeMeshes} disabled={busy} onChange={e => onMergeMeshes(e.currentTarget.checked)} /><span><b>Merge compatible meshes</b><small>Joins same-material geometry using the same skeleton. Different materials plus expression, morph, animated, or custom-extension meshes remain separate.</small></span></label>
     </div>
 
     <div class="process-block">
@@ -186,7 +186,7 @@ function BakePanel({ model, source, bake, mergeMeshes, onMergeMeshes, onBake, on
     <div class="process-block">
       <span class="process-number">3</span><div class="process-copy"><b>Bake a new copy</b><p>The result downloads as <code>{source ? source.name.replace(/\.vrm$/i, '') + '-baked.vrm' : 'avatar-baked.vrm'}</code>. The open source remains your untouched original.</p></div>
       {busy && <div class="bake-progress" role="status"><div><span>{bake.stage.replace('-', ' ')}</span><output>{Math.round(bake.progress * 100)}%</output></div><div class="progress"><i style={{ width: `${Math.max(4, bake.progress * 100)}%` }} /></div><small>{bake.detail}</small></div>}
-      {bake.stats && <div class="bake-result"><ShieldCheck /><span><b>{bake.status === 'complete' ? 'Baked copy downloaded' : 'Preflight complete'}</b><small>{bake.stats.meshes} source meshes · {bake.stats.vertices.toLocaleString()} vertices{bake.stats.mergedMeshes !== undefined ? ` · ${bake.stats.mergedMeshes} nodes + ${bake.stats.mergedPrimitives ?? 0} render meshes joined` : ''}</small></span></div>}
+      {bake.stats && <div class="bake-result"><ShieldCheck /><span><b>{bake.status === 'complete' ? 'Baked copy downloaded' : 'Preflight complete'}</b><small>{bake.stats.meshes} source meshes · {bake.stats.vertices.toLocaleString()} vertices{bake.stats.reconnectedSkins ? ` · ${bake.stats.reconnectedSkins} detached skins reconnected` : ''}{bake.stats.mergedMeshes !== undefined ? ` · ${bake.stats.mergedMeshes} nodes + ${bake.stats.mergedPrimitives ?? 0} render meshes joined` : ''}</small></span></div>}
       {bake.error && <p class="inline-error">{bake.error}</p>}
       {busy ? <button class="secondary wide" onClick={onCancel}><X /> Cancel baking</button> : <button class="primary wide" disabled={!eligible} onClick={onBake}><Download /> Bake and download VRM</button>}
       <p class="process-note"><Eye /> Processing and download creation stay entirely on this device.</p>
@@ -223,7 +223,7 @@ function App() {
   const [expressionValues, setExpressionValues] = useState<Record<string, number>>({}), [urlOpen, setUrlOpen] = useState(false), [captureOpen, setCaptureOpen] = useState(false);
   const [rightTab, setRightTab] = useState<'inspector' | 'animation' | 'bake'>('inspector'), [animation, setAnimation] = useState<AnimationState>(EMPTY_ANIMATION);
   const [sourceFile, setSourceFile] = useState<File | null>(null), [bake, setBake] = useState<BakeUiState>(EMPTY_BAKE);
-  const [mergeMeshes, setMergeMeshes] = useState(false);
+  const [mergeMeshes, setMergeMeshes] = useState(true);
   const [animationSpeed, setAnimationSpeed] = useState(1), [animationLoop, setAnimationLoop] = useState<AnimationLoopMode>('repeat'), [inPlace, setInPlace] = useState(true);
   const [legalAccepted, setLegalAccepted] = useState(hasAcceptedLegal), [legalView, setLegalView] = useState<LegalView>('about'), [legalOpen, setLegalOpen] = useState(false);
 

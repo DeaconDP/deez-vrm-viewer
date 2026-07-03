@@ -57,8 +57,8 @@ Further reading: [VRM Animation specification](https://github.com/vrm-c/vrm-spec
 ## Bake Meshes beta workflow
 
 1. Open a local binary `.vrm`, then select **Bake Meshes (beta)**.
-2. Optionally enable **Merge compatible meshes**. This concatenates same-material, non-morph geometry sharing a skin while keeping different materials, expression-bound, weight-animated, and custom-extension meshes separate.
-3. Choose **Bake and download VRM**. A worker checks the file against conservative memory, geometry, morph, and skin limits before changing its in-memory copy. Sparse accessors are expanded only inside that temporary copy.
+2. **Merge compatible meshes** is enabled by default and can be turned off. It concatenates same-material, non-morph geometry using the same skeleton while keeping different materials, expression-bound, weight-animated, and custom-extension meshes separate.
+3. Choose **Bake and download VRM**. A worker checks the file against conservative memory, geometry, morph, and skin limits before changing its in-memory copy. It also reconnects detached armatures only when at least three joints exactly match the canonical humanoid chain, preserving secondary hair and clothing bones. Sparse accessors are expanded only inside that temporary copy.
 4. The result downloads as `<name>-baked.vrm`. The selected source is read-only and is never overwritten. Compressed, malformed, remote, and otherwise unsupported models are refused without producing a partial file.
 
 ## Legal

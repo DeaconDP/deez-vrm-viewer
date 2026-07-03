@@ -85,6 +85,48 @@ function oneMeshWithTwoPrimitivesFixture() {
   return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
 }
 
+function equivalentSkinFixture() {
+  const parsed = parseGlb(twoMeshFixture()), json = parsed.json;
+  json.skins.push({ ...json.skins[0] });
+  json.nodes[3].skin = 1;
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
+function detachedRigFixture() {
+  const parsed = parseGlb(twoMeshFixture()), json = parsed.json;
+  const original = new Uint8Array(parsed.source, parsed.bin.offset, json.buffers[0].byteLength);
+  const binary = new Uint8Array(original.byteLength + 7 * 64);
+  binary.set(original);
+  const data = new DataView(binary.buffer);
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  for (let matrix = 0; matrix < 7; matrix++) identity.forEach((value, component) => data.setFloat32(original.byteLength + (matrix * 16 + component) * 4, value, true));
+  const mainView = json.bufferViews.length;
+  json.bufferViews.push({ buffer: 0, byteOffset: original.byteLength, byteLength: 3 * 64 });
+  const detachedView = json.bufferViews.length;
+  json.bufferViews.push({ buffer: 0, byteOffset: original.byteLength + 3 * 64, byteLength: 4 * 64 });
+  const mainBinds = json.accessors.length;
+  json.accessors.push({ bufferView: mainView, componentType: 5126, count: 3, type: 'MAT4' });
+  const detachedBinds = json.accessors.length;
+  json.accessors.push({ bufferView: detachedView, componentType: 5126, count: 4, type: 'MAT4' });
+  json.buffers[0].byteLength = binary.byteLength;
+
+  json.extensions.VRMC_vrm.humanoid = { humanBones: { hips: { node: 1 }, spine: { node: 4 }, chest: { node: 5 } } };
+  json.nodes[0].children = [1, 2, 3, 6];
+  json.nodes[1].name = 'Hips'; json.nodes[1].children = [4];
+  json.nodes.push(
+    { name: 'Spine', children: [5] },
+    { name: 'Chest' },
+    { name: 'Hips', children: [7] },
+    { name: 'Spine', children: [8] },
+    { name: 'Chest', children: [9] },
+    { name: 'CoatTail' }
+  );
+  json.skins[0] = { joints: [1, 4, 5], skeleton: 1, inverseBindMatrices: mainBinds };
+  json.skins.push({ joints: [6, 7, 8, 9], skeleton: 6, inverseBindMatrices: detachedBinds });
+  json.nodes[3].skin = 1;
+  return makeGlb(json, binary.buffer);
+}
+
 describe('mesh baker', () => {
   it('names output without overwriting the source', () => {
     expect(bakedFileName('Avatar.VRM')).toBe('Avatar-baked.vrm');
@@ -140,6 +182,27 @@ describe('mesh baker', () => {
     expect(parsed.json.accessors[parsed.json.meshes[0].primitives[0].attributes.POSITION].count).toBe(2);
     expect(parsed.json.nodes[3].mesh).toBeUndefined();
     expect(parsed.json.nodes[3].skin).toBeUndefined();
+  });
+
+  it('merges meshes that use equivalent duplicated skin records', () => {
+    const result = bakeVrm(equivalentSkinFixture(), 'avatar.vrm', () => {}, { mergeCompatibleMeshes: true });
+    const parsed = parseGlb(result.buffer);
+    expect(result.stats.mergedMeshes).toBe(1);
+    expect(result.stats.mergedPrimitives).toBe(1);
+    expect(parsed.json.meshes[0].primitives).toHaveLength(1);
+    expect(parsed.json.nodes[3].mesh).toBeUndefined();
+    expect(parsed.json.nodes[3].skin).toBeUndefined();
+  });
+
+  it('reconnects duplicated humanoid chains while preserving secondary bones', () => {
+    const result = bakeVrm(detachedRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
+    expect(result.stats.reconnectedSkins).toBe(1);
+    expect(result.stats.remappedJoints).toBe(3);
+    expect(detached.joints).toEqual([1, 4, 5, 9]);
+    expect(detached.skeleton).toBe(1);
+    expect(parsed.json.nodes[5].children).toContain(9);
+    expect(parsed.json.nodes[8].children ?? []).not.toContain(9);
   });
 
   it('keeps expression-bound meshes separate when merging is requested', () => {
