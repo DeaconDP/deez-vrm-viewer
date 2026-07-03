@@ -3,13 +3,13 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
   Aperture, BookOpen, Box, Camera, ChevronDown, ChevronRight, CircleHelp, Download, Eye, FileBox,
   FolderOpen, Gauge, Grid3X3, Hammer, Info, Maximize, Menu, PanelLeftClose, PanelRightClose,
-  Pause, Play, RefreshCw, Rotate3D, Search, Settings, ShieldCheck, SkipBack, Square, Undo2, Upload, X
+  Image, Pause, Play, RefreshCw, Rotate3D, Search, Settings, ShieldCheck, SkipBack, Sparkles, Square, Sun, Undo2, Upload, X
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { AnimationLoopMode, AnimationState, LoadState, ModelSummary, TreeItem } from './types';
 import { BAKE_LIMITS, type BakeStage, type BakeStats, type BakeWorkerResponse } from './bake/types';
 import { validateModelFile } from './platform/files';
-import { QUATERNIUS_ANIMATIONS } from './viewer/quaterniusAnimations';
+import { QUATERNIUS_LIBRARIES } from './viewer/quaterniusAnimations';
 import termsUrl from '../TERMS.md?url';
 import privacyUrl from '../PRIVACY.md?url';
 import licenseUrl from '../LICENSE?url';
@@ -32,6 +32,8 @@ const EMPTY_ANIMATION: AnimationState = { name: '', source: null, duration: 0, t
 type BakeStatus = 'idle' | 'reading' | 'working' | 'complete' | 'error';
 interface BakeUiState { status: BakeStatus; stage: BakeStage; progress: number; detail: string; error: string; stats?: BakeStats }
 const EMPTY_BAKE: BakeUiState = { status: 'idle', stage: 'preflight', progress: 0, detail: '', error: '' };
+interface SceneSettings { key: number; fill: number; rim: number; exposure: number; backgroundMode: 'color' | 'image'; backgroundColor: string; backgroundName: string }
+const DEFAULT_SCENE: SceneSettings = { key: 3.4, fill: 2.2, rim: 2.4, exposure: 1.05, backgroundMode: 'color', backgroundColor: '#70777d', backgroundName: '' };
 
 const formatBytes = (bytes: number) => bytes > 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 
@@ -109,6 +111,29 @@ function Inspector({ model, selected, expressionValues, onExpression, onReset }:
   </div>;
 }
 
+function ScenePanel({ settings, error, onChange, onFile, onUrl, onReset }: { settings: SceneSettings; error: string; onChange: (patch: Partial<SceneSettings>) => void; onFile: () => void; onUrl: (url: string) => void; onReset: () => void }) {
+  const [url, setUrl] = useState('');
+  const slider = (label: string, key: 'key' | 'fill' | 'rim', hint: string) => <label class="scene-slider"><span><b>{label}</b><small>{hint}</small></span><output>{settings[key].toFixed(1)}</output><input type="range" min="0" max="8" step="0.1" value={settings[key]} onInput={e => onChange({ [key]: Number(e.currentTarget.value) })} /></label>;
+  return <div class="panel-content scene-panel">
+    <div class="panel-heading"><div><span class="eyebrow">LOOK DEV</span><h2>Scene</h2></div><Sun /></div>
+    <Accordion title="Studio lighting" open>
+      {slider('Key light', 'key', 'Main light from the front-right')}
+      {slider('Fill light', 'fill', 'Softens shadows from above')}
+      {slider('Rim light', 'rim', 'Separates the silhouette behind')}
+      <label class="scene-slider"><span><b>Exposure</b><small>Overall rendered brightness</small></span><output>{settings.exposure.toFixed(2)}</output><input type="range" min="0.25" max="2.5" step="0.05" value={settings.exposure} onInput={e => onChange({ exposure: Number(e.currentTarget.value) })} /></label>
+    </Accordion>
+    <Accordion title="Background" open>
+      <div class="background-modes"><button class={settings.backgroundMode === 'color' ? 'selected' : ''} onClick={() => onChange({ backgroundMode: 'color' })}><span class="color-swatch" style={{ background: settings.backgroundColor }} />Solid color</button><button class={settings.backgroundMode === 'image' ? 'selected' : ''} onClick={onFile}><Image />Image file</button></div>
+      <label class="color-row"><span>Background color</span><input type="color" value={settings.backgroundColor} onChange={e => onChange({ backgroundColor: e.currentTarget.value, backgroundMode: 'color' })} /></label>
+      <form class="background-url" onSubmit={e => { e.preventDefault(); onUrl(url); }}><label>Image URL</label><div><input type="url" value={url} onInput={e => setUrl(e.currentTarget.value)} placeholder="https://example.com/background.jpg" required /><button class="secondary">Apply</button></div></form>
+      {settings.backgroundMode === 'image' && settings.backgroundName && <p class="background-current"><Image />{settings.backgroundName}</p>}
+      {error && <p class="inline-error">{error}</p>}
+      <p class="process-note"><Eye /> Local images stay on this device. Remote servers must allow CORS.</p>
+    </Accordion>
+    <div class="scene-reset"><button class="secondary wide" onClick={onReset}><Undo2 /> Reset scene</button></div>
+  </div>;
+}
+
 function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onImport, onPlayPause, onStop, onSeek, onSpeed, onLoop, onInPlace, onResetPose }: {
   model: ModelSummary | null; animation: AnimationState; speed: number; loop: AnimationLoopMode; inPlace: boolean;
   onPreset: (id: BuiltInAnimationId) => void; onImport: () => void; onPlayPause: () => void; onStop: () => void;
@@ -117,15 +142,16 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
 }) {
   const compatible = model?.format === 'VRM';
   const formatTime = (time: number) => `${Math.floor(time / 60)}:${(time % 60).toFixed(1).padStart(4, '0')}`;
-  const formatMotionName = (name: string) => name.replaceAll('_', ' ').replace(/\bRec\b/g, '(recovery)').replace(/\bLoop\b/g, 'loop');
+  const formatMotionName = (name: string) => name.replace(/^ual[12]:/, '').replaceAll('_', ' ').replace(/\bRec\b/g, '(recovery)').replace(/\bLoop\b/g, 'loop');
+  const animationLibrary = animation.name.startsWith('ual1:') ? 'Quaternius UAL1' : 'Quaternius UAL2';
   return <div class="panel-content animation-panel">
     <div class="panel-heading"><div><span class="eyebrow">MOTION LAB</span><h2>Animation Preview</h2></div><Play /></div>
     <div class={`compatibility ${compatible ? 'ok' : ''}`}><span class="status-dot" /><div><b>{compatible ? 'VRM humanoid ready' : model ? 'Retargeting unavailable' : 'Open a VRM model first'}</b><small>{compatible ? 'Motions will be mapped through standard humanoid bones.' : 'VRMA previews need a VRM 0.x or 1.0 humanoid.'}</small></div></div>
 
     <div class="process-block">
-      <span class="process-number">1</span><div class="process-copy"><b>Choose the motion</b><p>Pick from all 43 animations in the bundled Universal Animation Library 2 Standard pack.</p></div>
-      <label class="motion-picker"><span>Quaternius animation</span><select disabled={!compatible || animation.loading} value={animation.source === 'built-in' ? animation.name : ''} onChange={e => e.currentTarget.value && onPreset(e.currentTarget.value as BuiltInAnimationId)}><option value="">Select a motion…</option>{QUATERNIUS_ANIMATIONS.map(name => <option value={name} key={name}>{formatMotionName(name)}</option>)}</select></label>
-      <div class="creator-credit"><b>Animations and models by <a href="https://quaternius.com/" target="_blank" rel="noreferrer">@Quaternius</a></b><span><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Universal Animation Library 2</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer">CC0 1.0</a> · <a href="https://www.patreon.com/quaternius" target="_blank" rel="noreferrer">Support on Patreon</a></span></div>
+      <span class="process-number">1</span><div class="process-copy"><b>Choose the motion</b><p>Pick from 86 animations across the bundled Universal Animation Library 1 and 2 Standard packs.</p></div>
+      <label class="motion-picker"><span>Quaternius animation</span><select disabled={!compatible || animation.loading} value={animation.source === 'built-in' ? animation.name : ''} onChange={e => e.currentTarget.value && onPreset(e.currentTarget.value as BuiltInAnimationId)}><option value="">Select a motion…</option>{QUATERNIUS_LIBRARIES.map(library => <optgroup label={library.label} key={library.id}>{library.animations.map(name => <option value={`${library.id}:${name}`} key={`${library.id}:${name}`}>{formatMotionName(name)}</option>)}</optgroup>)}</select></label>
+      <div class="creator-credit"><b>Animations and models by <a href="https://quaternius.com/" target="_blank" rel="noreferrer">@Quaternius</a></b><span><a href="https://quaternius.com/packs/universalanimationlibrary.html" target="_blank" rel="noreferrer">UAL 1</a> + <a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">UAL 2</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer">CC0 1.0</a> · <a href="https://www.patreon.com/quaternius" target="_blank" rel="noreferrer">Support on Patreon</a></span></div>
       <button class="secondary wide" disabled={!compatible || animation.loading} onClick={onImport}><Upload />{animation.loading ? 'Reading animation…' : 'Import your own .vrma'}</button>
       <p class="process-note"><Eye /> Imported animations stay in this browser and are never uploaded.</p>
       {animation.error && <p class="inline-error">{animation.error}</p>}
@@ -133,7 +159,7 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
 
     <div class="process-block">
       <span class="process-number">2</span><div class="process-copy"><b>Control playback</b><p>Scrub to inspect a pose, then choose exactly how the clip should run.</p></div>
-      <div class="now-playing"><span>Now loaded</span><b>{animation.name ? formatMotionName(animation.name) : 'No animation selected'}</b><small>{animation.source === 'file' ? 'Local VRMA file' : animation.source === 'built-in' ? 'Quaternius UAL2 · CC0 1.0' : 'Choose a motion above'}</small></div>
+      <div class="now-playing"><span>Now loaded</span><b>{animation.name ? formatMotionName(animation.name) : 'No animation selected'}</b><small>{animation.source === 'file' ? 'Local VRMA file' : animation.source === 'built-in' ? `${animationLibrary} · CC0 1.0` : 'Choose a motion above'}</small></div>
       <label class="timeline"><input type="range" min="0" max={animation.duration || 1} step="0.01" value={animation.time} disabled={!animation.duration} onInput={e => onSeek(Number(e.currentTarget.value))} /><span>{formatTime(animation.time)} / {formatTime(animation.duration)}</span></label>
       <div class="transport">
         <button class="secondary" disabled={!animation.duration} onClick={() => onStop()} title="Stop and return to the first frame"><Square /> Stop</button>
@@ -211,14 +237,15 @@ function LegalDialog({ view, setView, mustAccept, onAccept, onClose }: { view: L
 }
 
 function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null), fileInput = useRef<HTMLInputElement>(null), animationInput = useRef<HTMLInputElement>(null), controller = useRef<Controller | null>(null), objectUrl = useRef(''), animationUrl = useRef('');
+  const canvasRef = useRef<HTMLCanvasElement>(null), fileInput = useRef<HTMLInputElement>(null), animationInput = useRef<HTMLInputElement>(null), backgroundInput = useRef<HTMLInputElement>(null), controller = useRef<Controller | null>(null), objectUrl = useRef(''), animationUrl = useRef(''), backgroundUrl = useRef('');
   const bakeWorker = useRef<Worker | null>(null), bakeGeneration = useRef(0);
   const [state, setState] = useState<LoadState>('idle'), [progress, setProgress] = useState(0), [error, setError] = useState('');
   const [model, setModel] = useState<ModelSummary | null>(null), [fileName, setFileName] = useState('No model open');
   const [leftOpen, setLeftOpen] = useState(true), [rightOpen, setRightOpen] = useState(true), [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<TreeItem | null>(null), [grid, setGrid] = useState(false), [turntable, setTurntable] = useState(false);
   const [expressionValues, setExpressionValues] = useState<Record<string, number>>({}), [urlOpen, setUrlOpen] = useState(false), [captureOpen, setCaptureOpen] = useState(false);
-  const [rightTab, setRightTab] = useState<'inspector' | 'animation' | 'bake'>('inspector'), [animation, setAnimation] = useState<AnimationState>(EMPTY_ANIMATION);
+  const [rightTab, setRightTab] = useState<'inspector' | 'scene' | 'animation' | 'bake'>('inspector'), [animation, setAnimation] = useState<AnimationState>(EMPTY_ANIMATION);
+  const [sceneSettings, setSceneSettings] = useState<SceneSettings>(DEFAULT_SCENE), [sceneError, setSceneError] = useState('');
   const [sourceFile, setSourceFile] = useState<File | null>(null), [bake, setBake] = useState<BakeUiState>(EMPTY_BAKE);
   const [mergeMeshes, setMergeMeshes] = useState(true);
   const [animationSpeed, setAnimationSpeed] = useState(1), [animationLoop, setAnimationLoop] = useState<AnimationLoopMode>('repeat'), [inPlace, setInPlace] = useState(true);
@@ -226,8 +253,8 @@ function App() {
 
   useEffect(() => {
     let live = true;
-    import('./viewer/ViewerController').then(({ ViewerController }) => { if (live && canvasRef.current) { controller.current = new ViewerController(canvasRef.current); controller.current.setAnimationListener(setAnimation); } });
-    return () => { live = false; bakeWorker.current?.terminate(); controller.current?.dispose(); if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); if (animationUrl.current) URL.revokeObjectURL(animationUrl.current); };
+    import('./viewer/ViewerController').then(({ ViewerController }) => { if (live && canvasRef.current) { controller.current = new ViewerController(canvasRef.current); controller.current.setAnimationListener(setAnimation); controller.current.setLighting(sceneSettings.key, sceneSettings.fill, sceneSettings.rim, sceneSettings.exposure); controller.current.setBackgroundColor(sceneSettings.backgroundColor); } });
+    return () => { live = false; bakeWorker.current?.terminate(); controller.current?.dispose(); if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); if (animationUrl.current) URL.revokeObjectURL(animationUrl.current); if (backgroundUrl.current) URL.revokeObjectURL(backgroundUrl.current); };
   }, []);
 
   const cancelBake = (showCancelled = true) => {
@@ -267,6 +294,30 @@ function App() {
   const changeSpeed = (value: number) => { setAnimationSpeed(value); controller.current?.setAnimationSpeed(value); };
   const changeLoop = (value: AnimationLoopMode) => { setAnimationLoop(value); controller.current?.setAnimationLoop(value); };
   const changeInPlace = (value: boolean) => { setInPlace(value); controller.current?.setAnimationInPlace(value); };
+  const changeScene = (patch: Partial<SceneSettings>) => {
+    setSceneError('');
+    setSceneSettings(old => {
+      const next = { ...old, ...patch };
+      controller.current?.setLighting(next.key, next.fill, next.rim, next.exposure);
+      if (next.backgroundMode === 'color') controller.current?.setBackgroundColor(next.backgroundColor);
+      return next;
+    });
+  };
+  const applyBackgroundImage = async (url: string, name: string) => {
+    setSceneError('');
+    try { await controller.current?.setBackgroundImage(url); setSceneSettings(old => ({ ...old, backgroundMode: 'image', backgroundName: name })); }
+    catch { setSceneError('The image could not be loaded. Check the address, file type, and CORS permissions.'); }
+  };
+  const openBackground = (file: File) => {
+    if (!file.type.startsWith('image/')) { setSceneError('Choose a PNG, JPEG, WebP, GIF, AVIF, or other browser-supported image.'); return; }
+    if (backgroundUrl.current) URL.revokeObjectURL(backgroundUrl.current);
+    backgroundUrl.current = URL.createObjectURL(file); void applyBackgroundImage(backgroundUrl.current, file.name);
+  };
+  const openBackgroundUrl = (value: string) => {
+    try { const parsed = new URL(value); if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error(); void applyBackgroundImage(parsed.href, parsed.hostname); }
+    catch { setSceneError('Enter a valid HTTP or HTTPS image URL.'); }
+  };
+  const resetScene = () => { setSceneSettings(DEFAULT_SCENE); setSceneError(''); controller.current?.setLighting(DEFAULT_SCENE.key, DEFAULT_SCENE.fill, DEFAULT_SCENE.rim, DEFAULT_SCENE.exposure); controller.current?.setBackgroundColor(DEFAULT_SCENE.backgroundColor); };
   const submitUrl = (event: SubmitEvent) => { event.preventDefault(); const input = new FormData(event.currentTarget as HTMLFormElement).get('url')?.toString() ?? ''; try { const parsed = new URL(input); if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost') throw new Error(); cancelBake(false); setSourceFile(null); void loadUrl(parsed.href, parsed.pathname.split('/').pop() || 'Remote model'); setUrlOpen(false); } catch { setError('Enter a valid HTTPS model URL.'); setState('error'); } };
   const acceptLegal = () => { try { localStorage.setItem(LEGAL_ACCEPTANCE_KEY, LEGAL_VERSION); } catch { /* Acceptance remains valid for this session. */ } setLegalAccepted(true); };
   const showLegal = (view: LegalView) => { setLegalView(view); setLegalOpen(true); };
@@ -326,9 +377,10 @@ function App() {
         <IconButton label="Grid" active={grid} onClick={() => setGrid(controller.current?.toggleGrid() ?? false)} hideMobile><Grid3X3 /></IconButton>
         <IconButton label="Screenshot" onClick={() => setCaptureOpen(true)}><Camera /></IconButton>
       </div>
-      <div class="toolbar-actions utility-actions"><IconButton label="Animation preview" active={rightTab === 'animation'} onClick={() => { setRightTab('animation'); setRightOpen(true); }}><Play /></IconButton><IconButton label="Bake meshes" active={rightTab === 'bake'} onClick={() => { setRightTab('bake'); setRightOpen(true); }}><Hammer /></IconButton><IconButton label="About and legal" onClick={() => showLegal('about')} hideMobile><CircleHelp /></IconButton><IconButton label="Legal menu" onClick={() => showLegal('terms')}><Menu /></IconButton></div>
+      <div class="toolbar-actions utility-actions"><IconButton label="Scene appearance" active={rightTab === 'scene'} onClick={() => { setRightTab('scene'); setRightOpen(true); }}><Sparkles /></IconButton><IconButton label="Animation preview" active={rightTab === 'animation'} onClick={() => { setRightTab('animation'); setRightOpen(true); }}><Play /></IconButton><IconButton label="Bake meshes" active={rightTab === 'bake'} onClick={() => { setRightTab('bake'); setRightOpen(true); }}><Hammer /></IconButton><IconButton label="About and legal" onClick={() => showLegal('about')} hideMobile><CircleHelp /></IconButton><IconButton label="Legal menu" onClick={() => showLegal('terms')}><Menu /></IconButton></div>
       <input ref={fileInput} hidden type="file" accept=".vrm,.glb,.gltf,model/gltf-binary,model/gltf+json" onChange={e => e.currentTarget.files?.[0] && void openFile(e.currentTarget.files[0])} />
       <input ref={animationInput} hidden type="file" accept=".vrma" onChange={e => { const file = e.currentTarget.files?.[0]; if (file) void openAnimation(file); e.currentTarget.value = ''; }} />
+      <input ref={backgroundInput} hidden type="file" accept="image/*" onChange={e => { const file = e.currentTarget.files?.[0]; if (file) openBackground(file); e.currentTarget.value = ''; }} />
     </header>
     <aside class="left-panel"><Explorer model={model} filter={filter} setFilter={setFilter} selected={selected} setSelected={setSelected} /></aside>
     <section class="viewport">
@@ -340,10 +392,10 @@ function App() {
       <button class="panel-toggle right-toggle" onClick={() => setRightOpen(!rightOpen)} aria-label="Toggle inspector"><PanelRightClose /></button>
       {model && <div class="viewport-badge"><span class="status-dot" />{model.format} {model.version}</div>}
     </section>
-    <aside class="right-panel"><div class="panel-tabs"><button class={rightTab === 'inspector' ? 'active' : ''} onClick={() => setRightTab('inspector')}>Inspector</button><button class={rightTab === 'animation' ? 'active' : ''} onClick={() => setRightTab('animation')}>Animation <small>(beta)</small></button><button class={rightTab === 'bake' ? 'active' : ''} onClick={() => setRightTab('bake')}>Bake Meshes <small>(beta)</small></button></div>{rightTab === 'inspector' ? <Inspector model={model} selected={selected} expressionValues={expressionValues} onExpression={expression} onReset={resetExpressions} /> : rightTab === 'animation' ? <AnimationPanel model={model} animation={animation} speed={animationSpeed} loop={animationLoop} inPlace={inPlace} onPreset={choosePreset} onImport={() => animationInput.current?.click()} onPlayPause={playPause} onStop={() => controller.current?.stopAnimation()} onSeek={time => controller.current?.seekAnimation(time)} onSpeed={changeSpeed} onLoop={changeLoop} onInPlace={changeInPlace} onResetPose={() => controller.current?.stopAnimation(true)} /> : <BakePanel model={model} source={sourceFile} bake={bake} mergeMeshes={mergeMeshes} onMergeMeshes={setMergeMeshes} onBake={() => void startBake()} onCancel={() => cancelBake(true)} />}</aside>
+    <aside class="right-panel"><div class="panel-tabs"><button class={rightTab === 'inspector' ? 'active' : ''} onClick={() => setRightTab('inspector')}>Inspector</button><button class={rightTab === 'scene' ? 'active' : ''} onClick={() => setRightTab('scene')}>Scene</button><button class={rightTab === 'animation' ? 'active' : ''} onClick={() => setRightTab('animation')}>Animation <small>(beta)</small></button><button class={rightTab === 'bake' ? 'active' : ''} onClick={() => setRightTab('bake')}>Bake <small>(beta)</small></button></div>{rightTab === 'inspector' ? <Inspector model={model} selected={selected} expressionValues={expressionValues} onExpression={expression} onReset={resetExpressions} /> : rightTab === 'scene' ? <ScenePanel settings={sceneSettings} error={sceneError} onChange={changeScene} onFile={() => backgroundInput.current?.click()} onUrl={openBackgroundUrl} onReset={resetScene} /> : rightTab === 'animation' ? <AnimationPanel model={model} animation={animation} speed={animationSpeed} loop={animationLoop} inPlace={inPlace} onPreset={choosePreset} onImport={() => animationInput.current?.click()} onPlayPause={playPause} onStop={() => controller.current?.stopAnimation()} onSeek={time => controller.current?.seekAnimation(time)} onSpeed={changeSpeed} onLoop={changeLoop} onInPlace={changeInPlace} onResetPose={() => controller.current?.stopAnimation(true)} /> : <BakePanel model={model} source={sourceFile} bake={bake} mergeMeshes={mergeMeshes} onMergeMeshes={setMergeMeshes} onBake={() => void startBake()} onCancel={() => cancelBake(true)} />}</aside>
     <footer class="statusbar">
       <span class="status-summary"><span class={`status-dot ${state}`} />{state === 'ready' ? 'Ready' : state === 'idle' ? 'Waiting for model' : state}</span>
-      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Animations by Quaternius</a><i>·</i><span>© 2026 Worldbuild.io</span></span>
+      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Animations by Quaternius</a><i>·</i><span>built for <a href="https://vrm.dev/" target="_blank" rel="noreferrer">VRM</a> by <a href="https://deac.online/" target="_blank" rel="noreferrer">deac.online</a> at <a href="https://worldbuild.io/" target="_blank" rel="noreferrer">worldbuild.io</a> with codex</span></span>
       <div class="model-summary">{model && <><span>{model.meshes} meshes</span><span>{model.triangles.toLocaleString()} tris</span><span>{formatBytes(model.size)}</span></>}<span class="fps"><Gauge /> 60 FPS</span></div>
     </footer>
     {urlOpen && <div class="modal-backdrop" onClick={() => setUrlOpen(false)}><form class="dialog" onSubmit={submitUrl} onClick={e => e.stopPropagation()}><div class="dialog-head"><h2>Open public URL</h2><button type="button" onClick={() => setUrlOpen(false)}><X /></button></div><p>The server must allow browser access (CORS). The model is never uploaded anywhere else.</p><input name="url" type="url" required autoFocus placeholder="https://example.com/avatar.vrm" /><div class="dialog-actions"><button type="button" class="secondary" onClick={() => setUrlOpen(false)}>Cancel</button><button class="primary">Open model</button></div></form></div>}

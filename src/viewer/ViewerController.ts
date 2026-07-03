@@ -5,9 +5,9 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin, type VRMAnimation } from '@pixiv/three-vrm-animation';
 import type { AnimationLoopMode, AnimationState, ModelSummary } from '../types';
 import { DuplicateBoneSync } from './duplicateBoneSync';
-import { retargetQuaterniusClip, type QuaterniusAnimationName } from './quaterniusAnimations';
+import { retargetQuaterniusClip, type QuaterniusAnimationId, type QuaterniusLibraryId } from './quaterniusAnimations';
 
-export type BuiltInAnimationId = QuaterniusAnimationName;
+export type BuiltInAnimationId = QuaterniusAnimationId;
 
 const EMPTY_ANIMATION: AnimationState = { name: '', source: null, duration: 0, time: 0, playing: false, loading: false, error: '' };
 
@@ -20,6 +20,12 @@ export class ViewerController {
   private vrm: VRM | null = null;
   private model: THREE.Object3D | null = null;
   private grid = new THREE.GridHelper(20, 20, 0x67717c, 0x383e45);
+  private fillLight = new THREE.DirectionalLight(0xeef5ff, 2.2);
+  private keyLight = new THREE.DirectionalLight(0xfff1dc, 3.4);
+  private rimLight = new THREE.DirectionalLight(0xb8d8ff, 2.4);
+  private backgroundTexture: THREE.Texture | null = null;
+  private backgroundColor = new THREE.Color(0x70777d);
+  private backgroundRequest = 0;
   private raf = 0;
   private animate = false;
   private turntable = false;
@@ -33,8 +39,8 @@ export class ViewerController {
   private speed = 1;
   private inPlace = true;
   private duplicateBoneSync: DuplicateBoneSync | null = null;
-  private quaterniusLibrary: { scene: THREE.Group; animations: THREE.AnimationClip[] } | null = null;
-  private quaterniusLoad: Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }> | null = null;
+  private quaterniusLibraries = new Map<QuaterniusLibraryId, { scene: THREE.Group; animations: THREE.AnimationClip[] }>();
+  private quaterniusLoads = new Map<QuaterniusLibraryId, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>>();
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -42,7 +48,7 @@ export class ViewerController {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
-    this.scene.background = new THREE.Color(0x70777d);
+    this.scene.background = this.backgroundColor;
     this.camera.position.set(0, 1.35, 3.2);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.set(0, 1.15, 0);
@@ -52,15 +58,12 @@ export class ViewerController {
     this.controls.addEventListener('end', () => setTimeout(() => this.stopLoop(), 350));
     this.grid.visible = false;
     this.scene.add(this.grid);
-    const fill = new THREE.DirectionalLight(0xeef5ff, 2.2);
-    fill.position.set(0, 4, 1);
-    this.scene.add(fill);
-    const key = new THREE.DirectionalLight(0xfff1dc, 3.4);
-    key.position.set(3, 5, 4);
-    this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0xb8d8ff, 2.4);
-    rim.position.set(-4, 3, -4);
-    this.scene.add(rim);
+    this.fillLight.position.set(0, 4, 1);
+    this.scene.add(this.fillLight);
+    this.keyLight.position.set(3, 5, 4);
+    this.scene.add(this.keyLight);
+    this.rimLight.position.set(-4, 3, -4);
+    this.scene.add(this.rimLight);
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(canvas.parentElement!);
     this.resize();
@@ -194,28 +197,34 @@ export class ViewerController {
     this.stopLoop();
   };
 
-  private loadQuaterniusLibrary() {
-    if (this.quaterniusLibrary) return Promise.resolve(this.quaterniusLibrary);
-    if (!this.quaterniusLoad) {
-      const url = new URL('animations/quaternius/UAL2_Standard.glb', document.baseURI).href;
-      this.quaterniusLoad = new GLTFLoader().loadAsync(url).then(gltf => {
-        this.quaterniusLibrary = { scene: gltf.scene, animations: gltf.animations };
-        return this.quaterniusLibrary;
-      }).finally(() => { this.quaterniusLoad = null; });
-    }
-    return this.quaterniusLoad;
+  private loadQuaterniusLibrary(libraryId: QuaterniusLibraryId) {
+    const loaded = this.quaterniusLibraries.get(libraryId);
+    if (loaded) return Promise.resolve(loaded);
+    const pending = this.quaterniusLoads.get(libraryId);
+    if (pending) return pending;
+    const fileName = libraryId === 'ual1' ? 'UAL1_Standard.glb' : 'UAL2_Standard.glb';
+    const url = new URL(`animations/quaternius/${fileName}`, document.baseURI).href;
+    const load = new GLTFLoader().loadAsync(url).then(gltf => {
+      const library = { scene: gltf.scene, animations: gltf.animations };
+      this.quaterniusLibraries.set(libraryId, library);
+      return library;
+    }).finally(() => { this.quaterniusLoads.delete(libraryId); });
+    this.quaterniusLoads.set(libraryId, load);
+    return load;
   }
 
   async loadBuiltInAnimation(id: BuiltInAnimationId) {
     if (!this.vrm || !this.mixer) throw new Error('Open a VRM humanoid before choosing a preview animation.');
     this.emitAnimation({ loading: true, error: '' });
     try {
-      const library = await this.loadQuaterniusLibrary();
-      const sourceClip = library.animations.find(clip => clip.name === id);
+      const [libraryId, animationName] = id.split(':') as [QuaterniusLibraryId, string];
+      const library = await this.loadQuaterniusLibrary(libraryId);
+      const sourceClip = library.animations.find(clip => clip.name === animationName);
       if (!sourceClip) throw new Error(`The bundled Quaternius clip “${id}” is missing.`);
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       if (!this.vrm) throw new Error('The VRM was closed while the animation was loading.');
       const clip = retargetQuaterniusClip(library.scene.clone(true), sourceClip, this.vrm);
+      clip.name = id;
       this.setAnimationClip(clip, 'built-in');
       return { name: clip.name, duration: clip.duration };
     } catch (reason) {
@@ -349,6 +358,29 @@ export class ViewerController {
   }
   setExpression(name: string, weight: number) { this.vrm?.expressionManager?.setValue(name, weight); this.vrm?.expressionManager?.update(); this.render(); }
   resetExpressions() { this.vrm?.expressionManager?.resetValues(); this.vrm?.expressionManager?.update(); this.render(); }
+  setLighting(key: number, fill: number, rim: number, exposure: number) {
+    this.keyLight.intensity = THREE.MathUtils.clamp(key, 0, 8);
+    this.fillLight.intensity = THREE.MathUtils.clamp(fill, 0, 8);
+    this.rimLight.intensity = THREE.MathUtils.clamp(rim, 0, 8);
+    this.renderer.toneMappingExposure = THREE.MathUtils.clamp(exposure, .25, 2.5);
+    this.render();
+  }
+  setBackgroundColor(color: string) {
+    this.backgroundRequest++;
+    this.backgroundTexture?.dispose(); this.backgroundTexture = null;
+    this.backgroundColor.set(color);
+    this.scene.background = this.backgroundColor;
+    this.render();
+  }
+  async setBackgroundImage(url: string) {
+    const request = ++this.backgroundRequest;
+    const texture = await new THREE.TextureLoader().loadAsync(url);
+    if (request !== this.backgroundRequest) { texture.dispose(); return; }
+    texture.colorSpace = THREE.SRGBColorSpace;
+    this.backgroundTexture?.dispose(); this.backgroundTexture = texture;
+    this.scene.background = texture;
+    this.render();
+  }
   capture(transparent = false, scale = 1) {
     const old = this.scene.background, size = this.renderer.getSize(new THREE.Vector2()), ratio = this.renderer.getPixelRatio();
     if (transparent) this.scene.background = null;
@@ -357,5 +389,5 @@ export class ViewerController {
     this.scene.background = old; this.renderer.setPixelRatio(ratio); this.renderer.setSize(size.x, size.y, false); this.render();
     return data;
   }
-  dispose() { this.unload(); this.resizeObserver.disconnect(); this.controls.dispose(); this.renderer.dispose(); cancelAnimationFrame(this.raf); }
+  dispose() { this.unload(); this.backgroundRequest++; this.backgroundTexture?.dispose(); this.resizeObserver.disconnect(); this.controls.dispose(); this.renderer.dispose(); cancelAnimationFrame(this.raf); }
 }

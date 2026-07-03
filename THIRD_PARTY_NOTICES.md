@@ -6,11 +6,13 @@ Versions reflect the production dependency tree installed on 3 July 2026.
 
 ## Bundled animation library
 
-The App redistributes the non-root-motion GLB from **Universal Animation
-Library 2 [Standard]**, containing 43 animations and a mannequin model.
+The App redistributes the non-root-motion GLBs from **Universal Animation
+Library 1 [Standard]** and **Universal Animation Library 2 [Standard]**,
+containing 86 animations in total and their mannequin models.
 
-**Animations and models by [@Quaternius](https://quaternius.com/).** Source:
-[Universal Animation Library 2](https://quaternius.com/packs/universalanimationlibrary2.html).
+**Animations and models by [@Quaternius](https://quaternius.com/).** Sources:
+[Universal Animation Library 1](https://quaternius.com/packs/universalanimationlibrary.html)
+and [Universal Animation Library 2](https://quaternius.com/packs/universalanimationlibrary2.html).
 The work is dedicated to the public domain under [Creative Commons Zero 1.0
 Universal](https://creativecommons.org/publicdomain/zero/1.0/) and may be
 copied, modified, redistributed, and used commercially without attribution.
