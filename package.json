@@ -1,0 +1,30 @@
+{
+  "name": "deez-vrm-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "author": "Dale Deacon (Worldbuild.io)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.4.2",
+    "@pixiv/three-vrm-animation": "^3.5.4",
+    "@preact/signals": "^2.3.1",
+    "lucide-preact": "^0.468.0",
+    "preact": "^10.26.4",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/three": "^0.180.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vite-plugin-pwa": "^1.0.3",
+    "vitest": "^3.2.4"
+  }
+}
