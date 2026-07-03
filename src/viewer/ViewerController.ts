@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin, type VRMAnimation } from '@pixiv/three-vrm-animation';
 import type { AnimationLoopMode, AnimationState, ModelSummary } from '../types';
+import { DuplicateBoneSync } from './duplicateBoneSync';
 
 export type BuiltInAnimationId = 'idle' | 'wave' | 'walk' | 'bow';
 
@@ -30,6 +31,7 @@ export class ViewerController {
   private loopMode: AnimationLoopMode = 'repeat';
   private speed = 1;
   private inPlace = true;
+  private duplicateBoneSync: DuplicateBoneSync | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -89,6 +91,10 @@ export class ViewerController {
       const time = this.action ? Math.min(this.action.time, duration) : 0;
       this.emitAnimation({ time });
     }
+    if (this.vrm && this.duplicateBoneSync) {
+      this.vrm.humanoid.update();
+      this.duplicateBoneSync.update();
+    }
     this.vrm?.update(delta);
     if (this.turntable && this.model) this.model.rotation.y += delta * 0.35;
     this.controls.update();
@@ -110,8 +116,11 @@ export class ViewerController {
     this.model = this.vrm?.scene ?? gltf.scene;
     if (this.vrm) {
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
+      const rawBones = Object.values(this.vrm.humanoid.rawHumanBones).flatMap(bone => bone ? [bone.node] : []);
+      this.duplicateBoneSync = new DuplicateBoneSync(this.vrm.scene, rawBones);
       VRMUtils.combineSkeletons(gltf.scene);
       VRMUtils.rotateVRM0(this.vrm);
+      this.duplicateBoneSync.update();
       this.mixer = new THREE.AnimationMixer(this.vrm.scene);
       this.mixer.addEventListener('finished', this.onAnimationFinished);
     }
@@ -159,7 +168,7 @@ export class ViewerController {
       const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
       mats.forEach(material => { Object.values(material).forEach(v => v instanceof THREE.Texture && v.dispose()); material.dispose(); });
     });
-    this.vrm = null; this.model = null; this.mixer = null; this.render();
+    this.vrm = null; this.model = null; this.mixer = null; this.duplicateBoneSync = null; this.render();
   }
 
   frameAll() {
@@ -350,6 +359,8 @@ export class ViewerController {
   resetPose() {
     this.vrm?.humanoid.resetNormalizedPose();
     this.vrm?.expressionManager?.resetValues();
+    this.vrm?.humanoid.update();
+    this.duplicateBoneSync?.update();
     this.vrm?.update(0);
     this.render();
   }
@@ -361,6 +372,8 @@ export class ViewerController {
     this.action.play();
     this.mixer.setTime(THREE.MathUtils.clamp(time, 0, this.animationState.duration));
     this.action.paused = !wasPlaying;
+    this.vrm?.humanoid.update();
+    this.duplicateBoneSync?.update();
     this.vrm?.update(0);
     this.emitAnimation({ time: THREE.MathUtils.clamp(time, 0, this.animationState.duration) });
     this.render();

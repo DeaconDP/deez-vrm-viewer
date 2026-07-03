@@ -28,7 +28,7 @@ interface AccessorView {
   componentBytes: number;
 }
 
-interface SkinInfo { joints: number[]; inverseBindAccessor: number; inverseBinds: Matrix[]; cleanBinds: Matrix[] }
+interface SkinInfo { joints: number[]; inverseBindAccessor: number; inverseBinds: Matrix[] }
 
 const fail = (code: string, message: string): never => { throw new BakeError(code, message); };
 const finite = (value: number, label: string) => Number.isFinite(value) ? value : fail('NON_FINITE_DATA', `${label} contains a non-finite value.`);
@@ -176,6 +176,81 @@ function nodeMatrix(node: Json): Matrix {
   ];
 }
 
+function buildHierarchy(nodes: Json[]) {
+  const parents = new Array<number>(nodes.length).fill(-1);
+  nodes.forEach((node, parent) => (node.children ?? []).forEach((child: number) => {
+    if (!Number.isInteger(child) || !nodes[child]) fail('MALFORMED_GLB', 'The node hierarchy contains an invalid child reference.');
+    if (parents[child] !== -1) fail('UNSUPPORTED_HIERARCHY', 'A node has multiple parents and cannot be normalized safely.');
+    parents[child] = parent;
+  }));
+  const visiting = new Set<number>(), worlds = new Array<Matrix>(nodes.length);
+  const worldFor = (index: number): Matrix => {
+    if (worlds[index]) return worlds[index];
+    if (visiting.has(index)) fail('UNSUPPORTED_HIERARCHY', 'The node hierarchy contains a cycle.');
+    visiting.add(index);
+    const local = nodeMatrix(nodes[index]);
+    worlds[index] = parents[index] === -1 ? local : multiply(worldFor(parents[index]), local);
+    visiting.delete(index);
+    return worlds[index];
+  };
+  nodes.forEach((_, index) => worldFor(index));
+  return { parents, worlds };
+}
+
+function humanoidNodeIndexes(json: Json) {
+  const vrm1Bones = json.extensions?.VRMC_vrm?.humanoid?.humanBones;
+  if (vrm1Bones && !Array.isArray(vrm1Bones)) return Object.values(vrm1Bones).flatMap((bone: any) => Number.isInteger(bone?.node) ? [bone.node as number] : []);
+  const vrm0Bones = json.extensions?.VRM?.humanoid?.humanBones;
+  if (Array.isArray(vrm0Bones)) return vrm0Bones.flatMap((bone: Json) => Number.isInteger(bone?.node) ? [bone.node as number] : []);
+  return [];
+}
+
+function repairDetachedSkeletons(json: Json, nodes: Json[], skins: Json[], skinInfos: SkinInfo[], worlds: Matrix[]) {
+  const canonicalNodes = new Set(humanoidNodeIndexes(json));
+  const candidates = new Map<string, number | null>();
+  for (const index of canonicalNodes) {
+    const name = nodes[index]?.name;
+    if (!name) continue;
+    candidates.set(name, candidates.has(name) ? null : index);
+  }
+
+  let reconnectedSkins = 0, remappedJoints = 0;
+  skinInfos.forEach((info, skinIndex) => {
+    const replacement = new Map<number, number>();
+    for (const joint of info.joints) {
+      if (canonicalNodes.has(joint)) continue;
+      const canonical = candidates.get(nodes[joint]?.name);
+      if (canonical != null) replacement.set(joint, canonical);
+    }
+    // One coincidental bone name is not enough evidence that an auxiliary rig
+    // is a duplicate humanoid. Real split rigs carry a short matching chain.
+    if (replacement.size < 3) return;
+    const repairedJoints = info.joints.map(joint => replacement.get(joint) ?? joint);
+    if (new Set(repairedJoints).size !== repairedJoints.length) return;
+
+    const jointSet = new Set(info.joints);
+    for (const [detached, canonical] of replacement) {
+      const detachedChildren: number[] = nodes[detached].children ?? [];
+      for (const child of [...detachedChildren]) {
+        if (replacement.has(child) || !jointSet.has(child)) continue;
+        nodes[detached].children = (nodes[detached].children ?? []).filter((value: number) => value !== child);
+        nodes[canonical].children ??= [];
+        if (!nodes[canonical].children.includes(child)) nodes[canonical].children.push(child);
+        const local = multiply(invert(worlds[canonical]), worlds[child]);
+        delete nodes[child].translation; delete nodes[child].rotation; delete nodes[child].scale;
+        nodes[child].matrix = local;
+      }
+    }
+
+    info.joints = repairedJoints;
+    skins[skinIndex].joints = repairedJoints;
+    if (replacement.has(skins[skinIndex].skeleton)) skins[skinIndex].skeleton = replacement.get(skins[skinIndex].skeleton);
+    reconnectedSkins++;
+    remappedJoints += replacement.size;
+  });
+  return { reconnectedSkins, remappedJoints };
+}
+
 function transformPoint(m: Matrix, v: number[]) {
   return [m[0] * v[0] + m[4] * v[1] + m[8] * v[2] + m[12], m[1] * v[0] + m[5] * v[1] + m[9] * v[2] + m[13], m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14]];
 }
@@ -269,10 +344,16 @@ function mergeCompatibleMeshes(parsed: ParsedGlb, targets: { node: Json; nodeInd
   const groups = new Map<string, { node: Json; nodeIndex: number }[]>();
   for (const target of targets) {
     const mesh = json.meshes[target.node.mesh];
+    const skin = json.skins[target.node.skin];
     const hasMorphs = (mesh.primitives ?? []).some((primitive: Json) => primitive.targets?.length) || mesh.weights?.length || mesh.extras?.targetNames?.length;
-    const customData = target.node.extensions || mesh.extensions;
+    const customData = target.node.extensions || mesh.extensions || skin.extensions || skin.extras;
     if (hasMorphs || customData || boundNodes.has(target.nodeIndex) || boundMeshes.has(target.node.mesh) || weightAnimated.has(target.nodeIndex)) continue;
-    const key = `${target.node.skin}:${annotationKey(target.nodeIndex, target.node.mesh)}`;
+    // Exporters commonly duplicate an otherwise identical glTF skin for every
+    // renderer. After baking, skins with the same ordered joint table and
+    // skeleton use the same clean bind poses, so their JOINTS_n values are
+    // directly compatible even when the skin indices differ.
+    const skinKey = JSON.stringify([skin.joints, skin.skeleton ?? -1]);
+    const key = `${skinKey}:${annotationKey(target.nodeIndex, target.node.mesh)}`;
     const group = groups.get(key) ?? []; group.push(target); groups.set(key, group);
   }
   let mergedMeshes = 0;
@@ -443,7 +524,7 @@ export function bakeVrm(source: ArrayBuffer, fileName: string, progress: Progres
       if (!nodes[joint]) fail('UNSUPPORTED_SKIN', `Skin ${skinIndex} references a missing joint.`);
       return readVector(accessor, jointIndex);
     });
-    return { joints: skin.joints, inverseBindAccessor: skin.inverseBindMatrices, inverseBinds, cleanBinds: skin.joints.map((joint: number) => invert(worlds[joint])) };
+    return { joints: [...skin.joints], inverseBindAccessor: skin.inverseBindMatrices, inverseBinds };
   });
 
   const targets = nodes.map((node, nodeIndex) => ({ node, nodeIndex })).filter(({ node }) => Number.isInteger(node.mesh) && Number.isInteger(node.skin));
@@ -562,15 +643,24 @@ export function bakeVrm(source: ArrayBuffer, fileName: string, progress: Progres
     }
   }
 
+  const repair = repairDetachedSkeletons(json, nodes, skins, skinInfos, worlds);
+  if (repair.reconnectedSkins) {
+    stats.reconnectedSkins = repair.reconnectedSkins;
+    stats.remappedJoints = repair.remappedJoints;
+    progress('bind-poses', 0.82, `Reconnected ${repair.reconnectedSkins} detached skin${repair.reconnectedSkins === 1 ? '' : 's'} to the humanoid rig`, stats);
+  }
+
   progress('bind-poses', 0.84, 'Writing clean inverse bind matrices', stats);
+  const repairedWorlds = buildHierarchy(nodes).worlds;
   const writtenBinds = new Map<number, string>();
   skinInfos.forEach(info => {
-    const signature = JSON.stringify(info.cleanBinds);
+    const cleanBinds = info.joints.map(joint => invert(repairedWorlds[joint]));
+    const signature = JSON.stringify(cleanBinds);
     const previous = writtenBinds.get(info.inverseBindAccessor);
     if (previous && previous !== signature) fail('SHARED_BIND_POSES', 'Multiple skins share incompatible inverse bind matrix storage.');
     if (previous) return;
     const accessor = getAccessor(parsed, info.inverseBindAccessor, 'MAT4', [FLOAT]);
-    info.cleanBinds.forEach((matrix, index) => writeFloatVector(accessor, index, matrix));
+    cleanBinds.forEach((matrix, index) => writeFloatVector(accessor, index, matrix));
     writtenBinds.set(info.inverseBindAccessor, signature);
   });
 

@@ -10,6 +10,8 @@ export interface BakeStats {
   vertices: number;
   morphVertexRecords: number;
   skins: number;
+  reconnectedSkins?: number;
+  remappedJoints?: number;
   mergedMeshes?: number;
   mergedPrimitives?: number;
 }
