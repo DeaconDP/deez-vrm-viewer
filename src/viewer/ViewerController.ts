@@ -5,8 +5,9 @@ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin, type VRMAnimation } from '@pixiv/three-vrm-animation';
 import type { AnimationLoopMode, AnimationState, ModelSummary } from '../types';
 import { DuplicateBoneSync } from './duplicateBoneSync';
+import { retargetQuaterniusClip, type QuaterniusAnimationName } from './quaterniusAnimations';
 
-export type BuiltInAnimationId = 'idle' | 'wave' | 'walk' | 'bow';
+export type BuiltInAnimationId = QuaterniusAnimationName;
 
 const EMPTY_ANIMATION: AnimationState = { name: '', source: null, duration: 0, time: 0, playing: false, loading: false, error: '' };
 
@@ -32,6 +33,8 @@ export class ViewerController {
   private speed = 1;
   private inPlace = true;
   private duplicateBoneSync: DuplicateBoneSync | null = null;
+  private quaterniusLibrary: { scene: THREE.Group; animations: THREE.AnimationClip[] } | null = null;
+  private quaterniusLoad: Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }> | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -191,90 +194,35 @@ export class ViewerController {
     this.stopLoop();
   };
 
-  private quaternionTrack(bone: string, times: number[], rotations: THREE.Quaternion[]) {
-    const node = this.vrm?.humanoid.getNormalizedBoneNode(bone as Parameters<VRM['humanoid']['getNormalizedBoneNode']>[0]);
-    if (!node) return null;
-    const rest = this.vrm?.humanoid.normalizedRestPose[bone as keyof VRM['humanoid']['normalizedRestPose']]?.rotation;
-    const restQuaternion = rest ? new THREE.Quaternion().fromArray(rest) : new THREE.Quaternion();
-    const values = rotations.flatMap(rotation => {
-      const q = restQuaternion.clone().multiply(rotation).normalize();
-      return [q.x, q.y, q.z, q.w];
-    });
-    return new THREE.QuaternionKeyframeTrack(`${node.name}.quaternion`, times, values);
-  }
-
-  private euler(x = 0, y = 0, z = 0) {
-    return new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'XYZ'));
-  }
-
-  private pointBone(restDirection: THREE.Vector3, x: number, y: number, z: number) {
-    return new THREE.Quaternion().setFromUnitVectors(restDirection, new THREE.Vector3(x, y, z).normalize());
-  }
-
-  private pointChildBone(parentRotation: THREE.Quaternion, restDirection: THREE.Vector3, x: number, y: number, z: number) {
-    const localTarget = new THREE.Vector3(x, y, z).normalize().applyQuaternion(parentRotation.clone().invert());
-    return new THREE.Quaternion().setFromUnitVectors(restDirection, localTarget);
-  }
-
-  private createBuiltInClip(id: BuiltInAnimationId) {
-    const tracks: THREE.KeyframeTrack[] = [];
-    const add = (bone: string, times: number[], rotations: THREE.Quaternion[]) => {
-      const track = this.quaternionTrack(bone, times, rotations);
-      if (track) tracks.push(track);
-    };
-    const leftArm = new THREE.Vector3(1, 0, 0), rightArm = new THREE.Vector3(-1, 0, 0), down = new THREE.Vector3(0, -1, 0);
-    const relaxedLeft = () => this.pointBone(leftArm, .16, -.98, .08);
-    const relaxedRight = () => this.pointBone(rightArm, -.16, -.98, .08);
-    if (id === 'idle') {
-      const t = [0, 1.5, 3];
-      add('chest', t, [this.euler(0, 0, -.018), this.euler(.018, 0, .018), this.euler(0, 0, -.018)]);
-      add('head', t, [this.euler(0, -.025), this.euler(.01, .025), this.euler(0, -.025)]);
-      add('leftUpperArm', t, [relaxedLeft(), this.pointBone(leftArm, .18, -.97, .1), relaxedLeft()]);
-      add('rightUpperArm', t, [relaxedRight(), this.pointBone(rightArm, -.18, -.97, .1), relaxedRight()]);
-      add('leftLowerArm', t, [this.euler(0, -.12), this.euler(0, -.15), this.euler(0, -.12)]);
-      add('rightLowerArm', t, [this.euler(0, .12), this.euler(0, .15), this.euler(0, .12)]);
-      return new THREE.AnimationClip('Gentle idle', 3, tracks);
+  private loadQuaterniusLibrary() {
+    if (this.quaterniusLibrary) return Promise.resolve(this.quaterniusLibrary);
+    if (!this.quaterniusLoad) {
+      const url = new URL('animations/quaternius/UAL2_Standard.glb', document.baseURI).href;
+      this.quaterniusLoad = new GLTFLoader().loadAsync(url).then(gltf => {
+        this.quaterniusLibrary = { scene: gltf.scene, animations: gltf.animations };
+        return this.quaterniusLibrary;
+      }).finally(() => { this.quaterniusLoad = null; });
     }
-    if (id === 'wave') {
-      const t = [0, .45, .75, 1.05, 1.35, 1.65, 2.1];
-      const raised = () => this.pointBone(rightArm, -.68, .73, .06);
-      const bentElbow = () => { const upperArm = raised(); return this.pointChildBone(upperArm, rightArm, -.06, 1, .02); };
-      add('leftUpperArm', t, [relaxedLeft(), relaxedLeft(), relaxedLeft(), relaxedLeft(), relaxedLeft(), relaxedLeft(), relaxedLeft()]);
-      add('rightUpperArm', t, [relaxedRight(), raised(), raised(), raised(), raised(), raised(), relaxedRight()]);
-      add('rightLowerArm', t, [this.euler(), bentElbow(), bentElbow(), bentElbow(), bentElbow(), bentElbow(), this.euler()]);
-      add('rightHand', t, [this.euler(), this.euler(0, 0, -.15), this.euler(0, .35, -.15), this.euler(0, -.35, -.15), this.euler(0, .35, -.15), this.euler(0, -.2, -.15), this.euler()]);
-      add('head', t, [this.euler(), this.euler(0, 0, .06), this.euler(0, 0, .06), this.euler(0, 0, .06), this.euler(0, 0, .06), this.euler(0, 0, .06), this.euler()]);
-      return new THREE.AnimationClip('Friendly wave', 2.1, tracks);
-    }
-    if (id === 'walk') {
-      const t = [0, .3, .6, .9, 1.2];
-      add('leftUpperLeg', t, [this.pointBone(down, 0, -.88, .48), this.euler(), this.pointBone(down, 0, -.88, -.48), this.euler(), this.pointBone(down, 0, -.88, .48)]);
-      add('rightUpperLeg', t, [this.pointBone(down, 0, -.88, -.48), this.euler(), this.pointBone(down, 0, -.88, .48), this.euler(), this.pointBone(down, 0, -.88, -.48)]);
-      add('leftLowerLeg', t, [this.euler(), this.euler(.62), this.euler(.16), this.euler(.12), this.euler()]);
-      add('rightLowerLeg', t, [this.euler(.16), this.euler(.12), this.euler(), this.euler(.62), this.euler(.16)]);
-      add('leftUpperArm', t, [this.pointBone(leftArm, .16, -.91, -.38), relaxedLeft(), this.pointBone(leftArm, .16, -.91, .38), relaxedLeft(), this.pointBone(leftArm, .16, -.91, -.38)]);
-      add('rightUpperArm', t, [this.pointBone(rightArm, -.16, -.91, .38), relaxedRight(), this.pointBone(rightArm, -.16, -.91, -.38), relaxedRight(), this.pointBone(rightArm, -.16, -.91, .38)]);
-      add('hips', t, [this.euler(0, 0, .035), this.euler(), this.euler(0, 0, -.035), this.euler(), this.euler(0, 0, .035)]);
-      add('spine', t, [this.euler(0, -.035), this.euler(), this.euler(0, .035), this.euler(), this.euler(0, -.035)]);
-      return new THREE.AnimationClip('Walk in place', 1.2, tracks);
-    }
-    const t = [0, .45, 1.2, 1.65];
-    add('leftUpperArm', t, [relaxedLeft(), relaxedLeft(), relaxedLeft(), relaxedLeft()]);
-    add('rightUpperArm', t, [relaxedRight(), relaxedRight(), relaxedRight(), relaxedRight()]);
-    add('spine', t, [this.euler(), this.euler(.38), this.euler(.38), this.euler()]);
-    add('chest', t, [this.euler(), this.euler(.16), this.euler(.16), this.euler()]);
-    add('head', t, [this.euler(), this.euler(-.28), this.euler(-.28), this.euler()]);
-    return new THREE.AnimationClip('Polite bow', 1.65, tracks);
+    return this.quaterniusLoad;
   }
 
-  loadBuiltInAnimation(id: BuiltInAnimationId) {
+  async loadBuiltInAnimation(id: BuiltInAnimationId) {
     if (!this.vrm || !this.mixer) throw new Error('Open a VRM humanoid before choosing a preview animation.');
-    this.stopAnimationAction();
-    this.vrm.humanoid.resetNormalizedPose();
-    this.vrm.update(0);
-    const clip = this.createBuiltInClip(id);
-    this.setAnimationClip(clip, 'built-in');
-    return { name: clip.name, duration: clip.duration };
+    this.emitAnimation({ loading: true, error: '' });
+    try {
+      const library = await this.loadQuaterniusLibrary();
+      const sourceClip = library.animations.find(clip => clip.name === id);
+      if (!sourceClip) throw new Error(`The bundled Quaternius clip “${id}” is missing.`);
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      if (!this.vrm) throw new Error('The VRM was closed while the animation was loading.');
+      const clip = retargetQuaterniusClip(library.scene.clone(true), sourceClip, this.vrm);
+      this.setAnimationClip(clip, 'built-in');
+      return { name: clip.name, duration: clip.duration };
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      this.emitAnimation({ loading: false, error: message });
+      throw reason;
+    }
   }
 
   async loadVRMA(url: string, fileName: string) {

@@ -9,6 +9,7 @@ import type { ComponentChildren } from 'preact';
 import type { AnimationLoopMode, AnimationState, LoadState, ModelSummary, TreeItem } from './types';
 import { BAKE_LIMITS, type BakeStage, type BakeStats, type BakeWorkerResponse } from './bake/types';
 import { validateModelFile } from './platform/files';
+import { QUATERNIUS_ANIMATIONS } from './viewer/quaterniusAnimations';
 import termsUrl from '../TERMS.md?url';
 import privacyUrl from '../PRIVACY.md?url';
 import licenseUrl from '../LICENSE?url';
@@ -116,19 +117,15 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
 }) {
   const compatible = model?.format === 'VRM';
   const formatTime = (time: number) => `${Math.floor(time / 60)}:${(time % 60).toFixed(1).padStart(4, '0')}`;
-  const presets: { id: BuiltInAnimationId; name: string; detail: string }[] = [
-    { id: 'idle', name: 'Gentle idle', detail: 'Breathing and small posture shifts' },
-    { id: 'wave', name: 'Friendly wave', detail: 'Upper-body and arm test' },
-    { id: 'walk', name: 'Walk cycle', detail: 'Leg, arm and hip deformation' },
-    { id: 'bow', name: 'Polite bow', detail: 'Spine, chest and head range' }
-  ];
+  const formatMotionName = (name: string) => name.replaceAll('_', ' ').replace(/\bRec\b/g, '(recovery)').replace(/\bLoop\b/g, 'loop');
   return <div class="panel-content animation-panel">
     <div class="panel-heading"><div><span class="eyebrow">MOTION LAB</span><h2>Animation Preview</h2></div><Play /></div>
     <div class={`compatibility ${compatible ? 'ok' : ''}`}><span class="status-dot" /><div><b>{compatible ? 'VRM humanoid ready' : model ? 'Retargeting unavailable' : 'Open a VRM model first'}</b><small>{compatible ? 'Motions will be mapped through standard humanoid bones.' : 'VRMA previews need a VRM 0.x or 1.0 humanoid.'}</small></div></div>
 
     <div class="process-block">
-      <span class="process-number">1</span><div class="process-copy"><b>Choose the motion</b><p>Built-in previews are lightweight CC0 test motions. Nothing starts until you select one.</p></div>
-      <div class="preset-list">{presets.map(preset => <button disabled={!compatible || animation.loading} onClick={() => onPreset(preset.id)} class={animation.name === preset.name ? 'selected' : ''} key={preset.id}><span><b>{preset.name}</b><small>{preset.detail}</small></span><Play /></button>)}</div>
+      <span class="process-number">1</span><div class="process-copy"><b>Choose the motion</b><p>Pick from all 43 animations in the bundled Universal Animation Library 2 Standard pack.</p></div>
+      <label class="motion-picker"><span>Quaternius animation</span><select disabled={!compatible || animation.loading} value={animation.source === 'built-in' ? animation.name : ''} onChange={e => e.currentTarget.value && onPreset(e.currentTarget.value as BuiltInAnimationId)}><option value="">Select a motion…</option>{QUATERNIUS_ANIMATIONS.map(name => <option value={name} key={name}>{formatMotionName(name)}</option>)}</select></label>
+      <div class="creator-credit"><b>Animations and models by <a href="https://quaternius.com/" target="_blank" rel="noreferrer">@Quaternius</a></b><span><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Universal Animation Library 2</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer">CC0 1.0</a> · <a href="https://www.patreon.com/quaternius" target="_blank" rel="noreferrer">Support on Patreon</a></span></div>
       <button class="secondary wide" disabled={!compatible || animation.loading} onClick={onImport}><Upload />{animation.loading ? 'Reading animation…' : 'Import your own .vrma'}</button>
       <p class="process-note"><Eye /> Imported animations stay in this browser and are never uploaded.</p>
       {animation.error && <p class="inline-error">{animation.error}</p>}
@@ -136,7 +133,7 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
 
     <div class="process-block">
       <span class="process-number">2</span><div class="process-copy"><b>Control playback</b><p>Scrub to inspect a pose, then choose exactly how the clip should run.</p></div>
-      <div class="now-playing"><span>Now loaded</span><b>{animation.name || 'No animation selected'}</b><small>{animation.source === 'file' ? 'Local VRMA file' : animation.source === 'built-in' ? 'Built-in CC0 preview' : 'Choose a motion above'}</small></div>
+      <div class="now-playing"><span>Now loaded</span><b>{animation.name ? formatMotionName(animation.name) : 'No animation selected'}</b><small>{animation.source === 'file' ? 'Local VRMA file' : animation.source === 'built-in' ? 'Quaternius UAL2 · CC0 1.0' : 'Choose a motion above'}</small></div>
       <label class="timeline"><input type="range" min="0" max={animation.duration || 1} step="0.01" value={animation.time} disabled={!animation.duration} onInput={e => onSeek(Number(e.currentTarget.value))} /><span>{formatTime(animation.time)} / {formatTime(animation.duration)}</span></label>
       <div class="transport">
         <button class="secondary" disabled={!animation.duration} onClick={() => onStop()} title="Stop and return to the first frame"><Square /> Stop</button>
@@ -257,7 +254,7 @@ function App() {
   const expression = (name: string, value: number) => { setExpressionValues(old => ({ ...old, [name]: value })); controller.current?.setExpression(name, value); };
   const resetExpressions = () => { setExpressionValues({}); controller.current?.resetExpressions(); };
   const screenshot = (transparent: boolean, scale: number) => { const anchor = document.createElement('a'); anchor.download = `${model?.name ?? 'deez-vrm'}-${Date.now()}.png`; anchor.href = controller.current?.capture(transparent, scale) ?? ''; anchor.click(); setCaptureOpen(false); };
-  const choosePreset = (id: BuiltInAnimationId) => { try { controller.current?.loadBuiltInAnimation(id); } catch (reason) { setAnimation(old => ({ ...old, error: reason instanceof Error ? reason.message : String(reason) })); } };
+  const choosePreset = (id: BuiltInAnimationId) => { void controller.current?.loadBuiltInAnimation(id).catch(reason => setAnimation(old => ({ ...old, error: reason instanceof Error ? reason.message : String(reason) }))); };
   const openAnimation = async (file: File) => {
     if (!/\.vrma$/i.test(file.name)) { setAnimation(old => ({ ...old, error: 'Choose a .vrma file. GLB and FBX motions must be converted to VRMA first.' })); return; }
     if (file.size > 50 * 1024 * 1024 && !confirm(`${file.name} is larger than 50 MB. Open it anyway?`)) return;
@@ -346,7 +343,7 @@ function App() {
     <aside class="right-panel"><div class="panel-tabs"><button class={rightTab === 'inspector' ? 'active' : ''} onClick={() => setRightTab('inspector')}>Inspector</button><button class={rightTab === 'animation' ? 'active' : ''} onClick={() => setRightTab('animation')}>Animation <small>(beta)</small></button><button class={rightTab === 'bake' ? 'active' : ''} onClick={() => setRightTab('bake')}>Bake Meshes <small>(beta)</small></button></div>{rightTab === 'inspector' ? <Inspector model={model} selected={selected} expressionValues={expressionValues} onExpression={expression} onReset={resetExpressions} /> : rightTab === 'animation' ? <AnimationPanel model={model} animation={animation} speed={animationSpeed} loop={animationLoop} inPlace={inPlace} onPreset={choosePreset} onImport={() => animationInput.current?.click()} onPlayPause={playPause} onStop={() => controller.current?.stopAnimation()} onSeek={time => controller.current?.seekAnimation(time)} onSpeed={changeSpeed} onLoop={changeLoop} onInPlace={changeInPlace} onResetPose={() => controller.current?.stopAnimation(true)} /> : <BakePanel model={model} source={sourceFile} bake={bake} mergeMeshes={mergeMeshes} onMergeMeshes={setMergeMeshes} onBake={() => void startBake()} onCancel={() => cancelBake(true)} />}</aside>
     <footer class="statusbar">
       <span class="status-summary"><span class={`status-dot ${state}`} />{state === 'ready' ? 'Ready' : state === 'idle' ? 'Waiting for model' : state}</span>
-      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><span>© 2026 Worldbuild.io</span></span>
+      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Animations by Quaternius</a><i>·</i><span>© 2026 Worldbuild.io</span></span>
       <div class="model-summary">{model && <><span>{model.meshes} meshes</span><span>{model.triangles.toLocaleString()} tris</span><span>{formatBytes(model.size)}</span></>}<span class="fps"><Gauge /> 60 FPS</span></div>
     </footer>
     {urlOpen && <div class="modal-backdrop" onClick={() => setUrlOpen(false)}><form class="dialog" onSubmit={submitUrl} onClick={e => e.stopPropagation()}><div class="dialog-head"><h2>Open public URL</h2><button type="button" onClick={() => setUrlOpen(false)}><X /></button></div><p>The server must allow browser access (CORS). The model is never uploaded anywhere else.</p><input name="url" type="url" required autoFocus placeholder="https://example.com/avatar.vrm" /><div class="dialog-actions"><button type="button" class="secondary" onClick={() => setUrlOpen(false)}>Cancel</button><button class="primary">Open model</button></div></form></div>}
