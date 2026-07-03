@@ -25,7 +25,7 @@ The launcher requires Node.js 20 or newer. If Node.js is missing and Windows Pac
 - VRM 0.x and 1.0 rendering through `@pixiv/three-vrm`
 - Orbit, pan, zoom, camera presets, grid, and turntable
 - Scene tree, expressions, metadata, and diagnostics
-- CC0 built-in animation previews: idle, wave, walk, and bow
+- All 43 animations from Quaternius' CC0 Universal Animation Library 2 Standard pack, retargeted to VRM humanoids in the browser
 - Local `.vrma` import with retargeting, timeline scrubbing, speed, loop, root-motion, pause, stop, and pose-reset controls
 - Cancellable local mesh baking for supported `.vrm` files, with clean bind poses and a separate `-baked.vrm` output
 - Local PNG screenshots, including transparent 2× capture
@@ -48,11 +48,13 @@ Stack: [Preact](https://preactjs.com/), [Vite](https://vite.dev/), [Three.js](ht
 ## Animation preview workflow
 
 1. Open a VRM 0.x or VRM 1.0 humanoid. Animation retargeting is deliberately disabled for ordinary glTF models because they do not provide the standardized humanoid bone map VRMA requires.
-2. Open the **Animation** tab. Choose one of the bundled CC0 diagnostic motions, or import a local `.vrma` file. Imported motion data stays inside the browser.
+2. Open the **Animation** tab. Choose one of the 43 bundled Quaternius motions, or import a local `.vrma` file. Imported motion data stays inside the browser.
 3. Use the timeline and transport controls to inspect individual poses or play the clip. Playback speed, end behavior, and horizontal root motion are independently controllable.
 4. Stop returns to the first frame; the pose-reset button stops playback and restores the humanoid rest pose.
 
-Further reading: [VRM Animation specification](https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm_animation-1.0), [three-vrm-animation](https://github.com/pixiv/three-vrm/tree/dev/packages/three-vrm-animation), [BVH-to-VRMA converter](https://vrm-c.github.io/bvh2vrma/), and the [Quaternius CC0 animation library](https://quaternius.com/packs/universalanimationlibrary2.html).
+The bundled motions and mannequin model are from [Quaternius' Universal Animation Library 2](https://quaternius.com/packs/universalanimationlibrary2.html), dedicated to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Please consider [supporting Quaternius on Patreon](https://www.patreon.com/quaternius).
+
+Further reading: [VRM Animation specification](https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm_animation-1.0), [three-vrm-animation](https://github.com/pixiv/three-vrm/tree/dev/packages/three-vrm-animation), and [BVH-to-VRMA converter](https://vrm-c.github.io/bvh2vrma/).
 
 ## Bake Meshes beta workflow
 

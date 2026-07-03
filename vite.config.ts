@@ -24,7 +24,10 @@ export default defineConfig({
         ],
         file_handlers: [{ action: '.', accept: { 'model/gltf-binary': ['.vrm', '.glb'] } }]
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'] }
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,glb,txt}'],
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024
+      }
     })
   ]
 });

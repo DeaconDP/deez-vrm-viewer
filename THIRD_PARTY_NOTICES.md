@@ -4,20 +4,22 @@ Deez VRM Viewer includes open-source components. Their licences apply to the
 components themselves; they do not make the original App code open source.
 Versions reflect the production dependency tree installed on 3 July 2026.
 
-## Bundled preview motion data
+## Bundled animation library
 
-The keyframe data authored in `src/viewer/ViewerController.ts` for **Gentle
-idle**, **Friendly wave**, **Walk in place**, and **Polite bow** is dedicated
-to the public domain under [Creative Commons Zero
-1.0](https://creativecommons.org/publicdomain/zero/1.0/). It may be copied,
-modified, redistributed, and used commercially without attribution.
+The App redistributes the non-root-motion GLB from **Universal Animation
+Library 2 [Standard]**, containing 43 animations and a mannequin model.
 
-These deliberately small diagnostic motions are bundled as readable code
-rather than opaque binary assets. The
-[Quaternius Universal Animation Library 2](https://quaternius.com/packs/universalanimationlibrary2.html)
-is linked as an optional CC0 source but is not redistributed with this App.
-Users should retain the licence information supplied with any animation they
-import.
+**Animations and models by [@Quaternius](https://quaternius.com/).** Source:
+[Universal Animation Library 2](https://quaternius.com/packs/universalanimationlibrary2.html).
+The work is dedicated to the public domain under [Creative Commons Zero 1.0
+Universal](https://creativecommons.org/publicdomain/zero/1.0/) and may be
+copied, modified, redistributed, and used commercially without attribution.
+Attribution is nevertheless included throughout the App in appreciation of
+the creator. Please consider [supporting Quaternius on
+Patreon](https://www.patreon.com/quaternius).
+
+The licence text distributed beside the asset is available at
+`public/animations/quaternius/LICENSE.txt`.
 
 | Component | Version | Licence | Copyright / project |
 |---|---:|---|---|
