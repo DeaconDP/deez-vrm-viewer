@@ -2,7 +2,7 @@
   "name": "deez-vrm-viewer",
   "private": true,
   "version": "1.0.0",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "Dale Deacon (Worldbuild.io)",
   "type": "module",
   "scripts": {

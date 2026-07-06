@@ -1,7 +1,8 @@
 # Third-party software notices
 
-Deez VRM Viewer includes open-source components. Their licences apply to the
-components themselves; they do not make the original App code open source.
+Deez VRM Viewer’s original source code is released under the MIT License. The
+App also includes open-source components and bundled assets listed below. Their
+licences apply to those components and assets.
 Versions reflect the production dependency tree installed on 3 July 2026.
 
 ## Bundled animation library
