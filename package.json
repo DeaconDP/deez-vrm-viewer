@@ -2,12 +2,18 @@
   "name": "deez-vrm-viewer",
   "private": true,
   "version": "1.0.0",
+  "description": "A private, local-first desktop viewer for VRM and glTF avatars.",
   "license": "MIT",
   "author": "Dale Deacon (Worldbuild.io)",
   "type": "module",
+  "main": "desktop/main.mjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "build:desktop": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build --mode desktop",
+    "desktop": "npm run build:desktop && electron .",
+    "desktop:dev": "electron . --dev",
+    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build.ps1",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run"
   },
@@ -22,9 +28,55 @@
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",
     "@types/three": "^0.180.0",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vite-plugin-pwa": "^1.0.3",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "io.worldbuild.deez-vrm-viewer",
+    "productName": "Deez VRM Viewer",
+    "artifactName": "Deez-VRM-Viewer-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "public/icon-512.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "Deez-VRM-Viewer-Setup-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Deez VRM Viewer"
+    },
+    "portable": {
+      "artifactName": "Deez-VRM-Viewer-Portable-${version}-${arch}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "vrm",
+          "glb",
+          "gltf"
+        ],
+        "name": "3D model",
+        "description": "VRM or glTF 3D model",
+        "role": "Viewer"
+      }
+    ]
   }
 }

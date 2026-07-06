@@ -259,10 +259,11 @@ function App() {
   const [mergeMeshes, setMergeMeshes] = useState(true);
   const [animationSpeed, setAnimationSpeed] = useState(1), [animationLoop, setAnimationLoop] = useState<AnimationLoopMode>('repeat'), [inPlace, setInPlace] = useState(true);
   const [legalAccepted, setLegalAccepted] = useState(hasAcceptedLegal), [legalView, setLegalView] = useState<LegalView>('about'), [legalOpen, setLegalOpen] = useState(false);
+  const [viewerReady, setViewerReady] = useState(false);
 
   useEffect(() => {
     let live = true;
-    import('./viewer/ViewerController').then(({ ViewerController }) => { if (live && canvasRef.current) { controller.current = new ViewerController(canvasRef.current); controller.current.setAnimationListener(setAnimation); controller.current.setLighting(sceneSettings.key, sceneSettings.fill, sceneSettings.rim, sceneSettings.exposure); controller.current.setBackgroundColor(sceneSettings.backgroundColor); } });
+    import('./viewer/ViewerController').then(({ ViewerController }) => { if (live && canvasRef.current) { controller.current = new ViewerController(canvasRef.current); controller.current.setAnimationListener(setAnimation); controller.current.setLighting(sceneSettings.key, sceneSettings.fill, sceneSettings.rim, sceneSettings.exposure); controller.current.setBackgroundColor(sceneSettings.backgroundColor); setViewerReady(true); } });
     return () => { live = false; bakeWorker.current?.terminate(); controller.current?.dispose(); if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); if (animationUrl.current) URL.revokeObjectURL(animationUrl.current); if (backgroundUrl.current) URL.revokeObjectURL(backgroundUrl.current); };
   }, []);
 
@@ -286,6 +287,14 @@ function App() {
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = URL.createObjectURL(file);
     if (await loadUrl(objectUrl.current, file.name, file.size)) setSourceFile(file);
   };
+  useEffect(() => {
+    if (!viewerReady || !window.desktop) return;
+    return window.desktop.onOpenModel(({ name, bytes }) => {
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      void openFile(new File([copy.buffer], name, { type: name.toLowerCase().endsWith('.gltf') ? 'model/gltf+json' : 'model/gltf-binary' }));
+    });
+  }, [viewerReady]);
   const loadFreebie = async () => {
     cancelBake(false); setSourceFile(null); setState('parsing'); setProgress(0); setError(''); setFileName('Finding a freebie…');
     try {
@@ -391,7 +400,7 @@ function App() {
 
   return <main class={`app ${!leftOpen ? 'left-closed' : ''} ${!rightOpen ? 'right-closed' : ''}`} onDragOver={e => e.preventDefault()} onDrop={onDrop}>
     <header class="toolbar">
-      <div class="brand"><img src="/icon-192.png" /><div><b>Deez VRM Viewer</b><span>{fileName}</span></div></div>
+      <div class="brand"><img src="./icon-192.png" /><div><b>Deez VRM Viewer</b><span>{fileName}</span></div></div>
       <div class="toolbar-actions primary-actions">
         <IconButton label="Open model" onClick={() => fileInput.current?.click()}><FolderOpen /></IconButton>
         <IconButton label="Open public URL" onClick={() => setUrlOpen(true)} hideMobile><Upload /></IconButton>

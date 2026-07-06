@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+release/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
