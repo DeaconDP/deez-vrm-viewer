@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
   Aperture, BookOpen, Box, Camera, ChevronDown, ChevronRight, CircleHelp, Download, Eye, FileBox,
-  FolderOpen, Gauge, Grid3X3, Hammer, Info, Maximize, Menu, PanelLeftClose, PanelRightClose,
+  FolderOpen, Gauge, Gift, Grid3X3, Hammer, Info, Maximize, Menu, PanelLeftClose, PanelRightClose,
   Image, Pause, Play, RefreshCw, Rotate3D, Search, Settings, ShieldCheck, SkipBack, Sparkles, Square, Sun, Undo2, Upload, X
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
@@ -22,6 +22,13 @@ type LegalView = 'about' | 'terms' | 'privacy' | 'licences';
 
 const LEGAL_VERSION = '2026-07-05-v2';
 const LEGAL_ACCEPTANCE_KEY = 'deez-vrm-viewer:legal-acceptance';
+const FREEBIE_REGISTRIES = [
+  'https://raw.githubusercontent.com/ToxSam/open-source-avatars/main/data/avatars/100avatars-r1.json',
+  'https://raw.githubusercontent.com/ToxSam/open-source-avatars/main/data/avatars/100avatars-r2.json',
+  'https://raw.githubusercontent.com/ToxSam/open-source-avatars/main/data/avatars/100avatars-r3.json'
+] as const;
+
+interface FreebieAvatar { name?: string; model_file_url?: string; format?: string; is_public?: boolean }
 
 const hasAcceptedLegal = () => {
   try { return localStorage.getItem(LEGAL_ACCEPTANCE_KEY) === LEGAL_VERSION; }
@@ -49,14 +56,16 @@ function Accordion({ title, open = false, children }: { title: string; open?: bo
   </section>;
 }
 
-function EmptyState({ onOpen, onUrl }: { onOpen: () => void; onUrl: () => void }) {
+function EmptyState({ onOpen, onUrl, onFreebie }: { onOpen: () => void; onUrl: () => void; onFreebie: () => void }) {
   return <div class="empty-state">
     <div class="drop-glyph"><FileBox /></div>
-    <h1>Drop a VRM file here</h1>
-    <p>Inspect VRM 0.x, VRM 1.0, GLB, and glTF models.</p>
-    <button class="primary" onClick={onOpen}><FolderOpen /> Choose a file</button>
-    <button class="text-button" onClick={onUrl}>Open public URL</button>
-    <span class="private-note"><Eye /> Files stay on this device</span>
+    <h1>Drop a .VRM file here</h1>
+    <div class="empty-actions">
+      <button class="primary" onClick={onOpen}><FolderOpen /> Choose a file</button>
+      <button class="url-button" onClick={onUrl}>Open with URL</button>
+      <button class="freebie-button" onClick={onFreebie}><Gift /> Load a Freebie</button>
+    </div>
+    <p class="empty-footnote">Inspect VRM 0.x, VRM 1.0, GLB, and glTF models. Files stay on this device.</p>
   </div>;
 }
 
@@ -277,6 +286,23 @@ function App() {
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = URL.createObjectURL(file);
     if (await loadUrl(objectUrl.current, file.name, file.size)) setSourceFile(file);
   };
+  const loadFreebie = async () => {
+    cancelBake(false); setSourceFile(null); setState('parsing'); setProgress(0); setError(''); setFileName('Finding a freebie…');
+    try {
+      const registryUrl = FREEBIE_REGISTRIES[Math.floor(Math.random() * FREEBIE_REGISTRIES.length)];
+      const response = await fetch(registryUrl);
+      if (!response.ok) throw new Error(`The freebie registry returned ${response.status}.`);
+      const registry = await response.json() as FreebieAvatar[];
+      const avatars = registry.filter(avatar => avatar.is_public !== false && avatar.format === 'VRM' && typeof avatar.model_file_url === 'string');
+      if (!avatars.length) throw new Error('The freebie registry contains no public VRM models.');
+      const avatar = avatars[Math.floor(Math.random() * avatars.length)];
+      const modelUrl = new URL(avatar.model_file_url!);
+      if (modelUrl.protocol !== 'https:') throw new Error('The selected freebie does not use a secure model URL.');
+      await loadUrl(modelUrl.href, `${avatar.name?.trim() || 'Freebie'}.vrm`);
+    } catch (reason) {
+      console.error(reason); setError(reason instanceof Error ? reason.message : String(reason)); setState('error'); setModel(null);
+    }
+  };
   const onDrop = (event: DragEvent) => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (file) void openFile(file); };
   const expression = (name: string, value: number) => { setExpressionValues(old => ({ ...old, [name]: value })); controller.current?.setExpression(name, value); };
   const resetExpressions = () => { setExpressionValues({}); controller.current?.resetExpressions(); };
@@ -385,7 +411,7 @@ function App() {
     <aside class="left-panel"><Explorer model={model} filter={filter} setFilter={setFilter} selected={selected} setSelected={setSelected} /></aside>
     <section class="viewport">
       <canvas ref={canvasRef} aria-label={model ? `3D view of ${model.name}` : 'Empty 3D model viewport'} />
-      {state === 'idle' && <EmptyState onOpen={() => fileInput.current?.click()} onUrl={() => setUrlOpen(true)} />}
+      {state === 'idle' && <EmptyState onOpen={() => fileInput.current?.click()} onUrl={() => setUrlOpen(true)} onFreebie={() => void loadFreebie()} />}
       {state === 'parsing' && <div class="loading"><div class="spinner" /><b>Opening {fileName}</b><span>{progress ? `${Math.round(progress * 100)}%` : 'Reading model…'}</span><div class="progress"><i style={{ width: `${Math.max(8, progress * 100)}%` }} /></div></div>}
       {state === 'error' && <div class="error-card"><X /><div><b>This model could not be opened.</b><p>{error}</p><button class="secondary" onClick={() => fileInput.current?.click()}>Choose another file</button></div></div>}
       <button class="panel-toggle left-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label="Toggle scene explorer"><PanelLeftClose /></button>
@@ -395,7 +421,7 @@ function App() {
     <aside class="right-panel"><div class="panel-tabs"><button class={rightTab === 'inspector' ? 'active' : ''} onClick={() => setRightTab('inspector')}>Inspector</button><button class={rightTab === 'scene' ? 'active' : ''} onClick={() => setRightTab('scene')}>Scene</button><button class={rightTab === 'animation' ? 'active' : ''} onClick={() => setRightTab('animation')}>Animation <small>(beta)</small></button><button class={rightTab === 'bake' ? 'active' : ''} onClick={() => setRightTab('bake')}>Bake <small>(beta)</small></button></div>{rightTab === 'inspector' ? <Inspector model={model} selected={selected} expressionValues={expressionValues} onExpression={expression} onReset={resetExpressions} /> : rightTab === 'scene' ? <ScenePanel settings={sceneSettings} error={sceneError} onChange={changeScene} onFile={() => backgroundInput.current?.click()} onUrl={openBackgroundUrl} onReset={resetScene} /> : rightTab === 'animation' ? <AnimationPanel model={model} animation={animation} speed={animationSpeed} loop={animationLoop} inPlace={inPlace} onPreset={choosePreset} onImport={() => animationInput.current?.click()} onPlayPause={playPause} onStop={() => controller.current?.stopAnimation()} onSeek={time => controller.current?.seekAnimation(time)} onSpeed={changeSpeed} onLoop={changeLoop} onInPlace={changeInPlace} onResetPose={() => controller.current?.stopAnimation(true)} /> : <BakePanel model={model} source={sourceFile} bake={bake} mergeMeshes={mergeMeshes} onMergeMeshes={setMergeMeshes} onBake={() => void startBake()} onCancel={() => cancelBake(true)} />}</aside>
     <footer class="statusbar">
       <span class="status-summary"><span class={`status-dot ${state}`} />{state === 'ready' ? 'Ready' : state === 'idle' ? 'Waiting for model' : state}</span>
-      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Animations by Quaternius</a><i>·</i><span>built for <a href="https://vrm.dev/" target="_blank" rel="noreferrer">VRM</a> by <a href="https://deac.online/" target="_blank" rel="noreferrer">deac.online</a> at <a href="https://worldbuild.io/" target="_blank" rel="noreferrer">worldbuild.io</a> with codex</span></span>
+      <span class="footer-credit"><button onClick={() => showLegal('terms')}>Terms</button><i>·</i><button onClick={() => showLegal('privacy')}>Privacy</button><i>·</i><button onClick={() => showLegal('licences')}>Licences</button><i>·</i><a href="https://github.com/ToxSam/open-source-avatars" target="_blank" rel="noreferrer">Free VRMs by ToxSam</a><i>·</i><a href="https://quaternius.com/packs/universalanimationlibrary2.html" target="_blank" rel="noreferrer">Animations by Quaternius</a><i>·</i><span>built for <a href="https://vrm.dev/" target="_blank" rel="noreferrer">VRM</a> by <a href="https://deac.online/" target="_blank" rel="noreferrer">deac.online</a> at <a href="https://worldbuild.io/" target="_blank" rel="noreferrer">worldbuild.io</a> with codex</span></span>
       <div class="model-summary">{model && <><span>{model.meshes} meshes</span><span>{model.triangles.toLocaleString()} tris</span><span>{formatBytes(model.size)}</span></>}<span class="fps"><Gauge /> 60 FPS</span></div>
     </footer>
     {urlOpen && <div class="modal-backdrop" onClick={() => setUrlOpen(false)}><form class="dialog" onSubmit={submitUrl} onClick={e => e.stopPropagation()}><div class="dialog-head"><h2>Open public URL</h2><button type="button" onClick={() => setUrlOpen(false)}><X /></button></div><p>The server must allow browser access (CORS). The model is never uploaded anywhere else.</p><input name="url" type="url" required autoFocus placeholder="https://example.com/avatar.vrm" /><div class="dialog-actions"><button type="button" class="secondary" onClick={() => setUrlOpen(false)}>Cancel</button><button class="primary">Open model</button></div></form></div>}
