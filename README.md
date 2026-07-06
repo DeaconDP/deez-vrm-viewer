@@ -65,10 +65,11 @@ Further reading: [VRM Animation specification](https://github.com/vrm-c/vrm-spec
 
 ## Legal
 
-This is proprietary software, licensed rather than sold. Use is subject to the
-[Terms of Use](TERMS.md) and [Privacy Notice](PRIVACY.md). See [LICENSE](LICENSE)
-for the end-user licence and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-for the open-source components and licences included in the App.
+This project is open source under the [MIT License](LICENSE). You may use,
+modify, and distribute it freely, provided you retain the copyright and
+permission notice. Use is also subject to the [Terms of Use](TERMS.md) and
+[Privacy Notice](PRIVACY.md). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+for bundled open-source components and their licences.
 
 The in-app first-run notice records acceptance locally on the user's device.
 Changing `LEGAL_VERSION` in `src/main.tsx` will require users to accept the

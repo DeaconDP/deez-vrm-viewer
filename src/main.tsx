@@ -20,7 +20,7 @@ type Controller = import('./viewer/ViewerController').ViewerController;
 type BuiltInAnimationId = import('./viewer/ViewerController').BuiltInAnimationId;
 type LegalView = 'about' | 'terms' | 'privacy' | 'licences';
 
-const LEGAL_VERSION = '2026-07-03-v1';
+const LEGAL_VERSION = '2026-07-05-v2';
 const LEGAL_ACCEPTANCE_KEY = 'deez-vrm-viewer:legal-acceptance';
 
 const hasAcceptedLegal = () => {
@@ -221,16 +221,16 @@ function LegalDialog({ view, setView, mustAccept, onAccept, onClose }: { view: L
   const [confirmed, setConfirmed] = useState(false);
   const documents = { terms: termsUrl, privacy: privacyUrl, licences: noticesUrl };
   const copy = {
-    about: <><h2>About Deez VRM Viewer</h2><p>A proprietary, local-first viewer by Dale Deacon, trading as Worldbuild.io and deac.online.</p><div class="legal-callout"><b>Your files stay local by default.</b><span>Files selected from your device are rendered in your browser. Opening a public URL contacts that third-party server directly.</span></div><p>Version 1.0.0 · Legal terms version 1.0, effective 3 July 2026.</p></>,
-    terms: <><h2>Terms of Use</h2><p><b>Important:</b> the Terms allocate risk, disclaim warranties, limit liability, and include an indemnity, subject always to rights that applicable law does not allow us to exclude.</p><p>You are responsible for the models and URLs you open, all required creator and personality permissions, embedded VRM licence terms, and any screenshots or other outputs you use or publish.</p><p>The App is provided “as is”. Large, malformed, or hostile 3D files can consume device resources or cause instability. Keep backups and use trusted sources.</p></>,
+    about: <><h2>About Deez VRM Viewer</h2><p>An open-source, local-first viewer by Dale Deacon, trading as Worldbuild.io and deac.online. Released under the MIT License.</p><div class="legal-callout"><b>Your files stay local by default.</b><span>Files selected from your device are rendered in your browser. Opening a public URL contacts that third-party server directly.</span></div><p>Version 1.0.0 · Legal terms version 2.0, effective 5 July 2026.</p></>,
+    terms: <><h2>Terms of Use</h2><p>The App is open source under the MIT License. These Terms add disclaimers and user-responsibility provisions; they do not restrict lawful use of the source code under MIT.</p><p>You are responsible for the models and URLs you open, all required creator and personality permissions, embedded VRM licence terms, and any screenshots or other outputs you use or publish.</p><p>The App is provided “as is”. Large, malformed, or hostile 3D files can consume device resources or cause instability. Keep backups and use trusted sources.</p></>,
     privacy: <><h2>Privacy Notice</h2><p>The App has no Provider-operated accounts, analytics, advertising, telemetry, trackers, or cloud upload. Local files are processed transiently in your browser.</p><p>Your legal acceptance and PWA cache are stored on this device. A remote model host, site host, browser, operating system, network, or distributor may process technical data independently.</p></>,
-    licences: <><h2>Licensing</h2><p>The original App is proprietary and licensed, not sold. All rights are reserved. Third-party open-source components keep their respective MIT or ISC licences.</p><p>Nothing in the App grants rights to a model, avatar, texture, likeness, brand, or other user-supplied content.</p></>
+    licences: <><h2>Licensing</h2><p>The original App is released under the MIT License. You may use, modify, and distribute it with attribution. Third-party open-source components keep their respective MIT or ISC licences.</p><p>Nothing in the App grants rights to a model, avatar, texture, likeness, brand, or other user-supplied content.</p></>
   };
   return <div class="modal-backdrop legal-backdrop" onClick={() => !mustAccept && onClose()}>
     <section class="dialog legal-dialog" role="dialog" aria-modal="true" aria-labelledby="legal-title" onClick={e => e.stopPropagation()}>
       <div class="dialog-head"><div><span class="eyebrow">LEGAL &amp; LICENSING</span><h1 id="legal-title">{mustAccept ? 'Before you continue' : 'App information'}</h1></div>{!mustAccept && <button onClick={onClose} aria-label="Close legal information"><X /></button>}</div>
       <nav class="legal-tabs" aria-label="Legal documents">{(['about', 'terms', 'privacy', 'licences'] as LegalView[]).map(item => <button class={view === item ? 'active' : ''} onClick={() => setView(item)}>{item === 'licences' ? 'Licences' : item[0].toUpperCase() + item.slice(1)}</button>)}</nav>
-      <div class="legal-copy">{copy[view]}{view !== 'about' && <a class="document-link" href={documents[view]} target="_blank" rel="noreferrer">Read the full {view === 'licences' ? 'third-party notices' : view} ↗</a>}{view === 'licences' && <a class="document-link secondary-document" href={licenseUrl} target="_blank" rel="noreferrer">Read the proprietary software licence ↗</a>}</div>
+      <div class="legal-copy">{copy[view]}{view !== 'about' && <a class="document-link" href={documents[view]} target="_blank" rel="noreferrer">Read the full {view === 'licences' ? 'third-party notices' : view} ↗</a>}{view === 'licences' && <a class="document-link secondary-document" href={licenseUrl} target="_blank" rel="noreferrer">Read the MIT licence ↗</a>}</div>
       {mustAccept && <div class="legal-accept"><label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.currentTarget.checked)} /><span>I have read and agree to the <a href={termsUrl} target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href={privacyUrl} target="_blank" rel="noreferrer">Privacy Notice</a>.</span></label><button class="primary" disabled={!confirmed} onClick={onAccept}>Agree and continue</button><small>If you do not agree, do not use the App.</small></div>}
     </section>
   </div>;

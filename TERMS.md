@@ -1,6 +1,6 @@
 # Deez VRM Viewer — Terms of Use
 
-**Version 1.0 · Effective 3 July 2026**
+**Version 2.0 · Effective 5 July 2026**
 
 These Terms are a binding agreement between you and Dale Deacon, trading as
 Worldbuild.io and deac.online (“Provider”, “we”, “us”). They govern Deez VRM
@@ -9,7 +9,7 @@ services (together, the “App”). By selecting **I agree**, installing, access
 or using the App, you agree to these Terms and the Privacy Notice. If you use
 the App for an organisation, you confirm that you can bind it.
 
-> **IMPORTANT RISK AND LIABILITY NOTICE:** Sections 5, 8, 9, 10, and 11 limit
+> **IMPORTANT RISK AND LIABILITY NOTICE:** Sections 6, 9, 10, and 11 limit
 > our obligations and liability, allocate risks to you, and may require you to
 > indemnify us. Please read them carefully. Nothing in these Terms excludes or
 > limits a right or remedy that applicable law, including the South African
@@ -25,16 +25,21 @@ law prohibits you from doing so.
 The date and version of your acceptance may be stored locally on your device.
 It is not sent to us by the App.
 
-## 2. Licence and ownership
+## 2. Open-source licence and attribution
 
-Subject to these Terms, we grant you the limited end-user licence stated in
-`LICENSE`. The App is licensed, not sold. We and our licensors retain all
-rights not expressly granted. Third-party software is governed by its own
-licences, identified in `THIRD_PARTY_NOTICES.md`.
+The App’s original source code is open source under the MIT License in
+`LICENSE`. You may use, copy, modify, merge, publish, distribute, sublicense,
+and sell copies of the Software, subject to the MIT conditions, including
+retaining the copyright notice and permission notice in all copies or
+substantial portions.
 
-You may not use our names, logos, or branding without written permission; use
-the App to develop or train a competing product; bypass technical restrictions;
-or imply that we endorse you, your content, or your activities.
+Third-party software and bundled assets are governed by their own licences,
+identified in `THIRD_PARTY_NOTICES.md`. Those terms govern those components.
+
+Nothing in these Terms restricts rights granted to you under the MIT License for
+the original App code. You may not use our names, logos, or branding in a way
+that suggests sponsorship, endorsement, or affiliation without prior written
+permission.
 
 ## 3. Acceptable use
 
@@ -133,14 +138,12 @@ third-party content, licences, or remote services, whether in contract, delict
 possibility was known.
 
 To the fullest extent permitted by law, our total aggregate liability arising
-from the App or these Terms will not exceed the greater of (a) the amount you
-paid us specifically for the App in the 12 months before the event giving rise
-to the claim, or (b) ZAR 100. The exclusions and cap apply collectively, are
-fundamental to the allocation of risk, and apply even if a remedy fails of its
-essential purpose. They do not apply to fraud, wilful misconduct, gross
-negligence, death or personal injury caused by negligence where liability
-cannot lawfully be excluded, or any other liability that applicable law makes
-non-excludable.
+from the App or these Terms will not exceed ZAR 100. The exclusions and cap
+apply collectively, are fundamental to the allocation of risk, and apply even
+if a remedy fails of its essential purpose. They do not apply to fraud, wilful
+misconduct, gross negligence, death or personal injury caused by negligence
+where liability cannot lawfully be excluded, or any other liability that
+applicable law makes non-excludable.
 
 ## 11. Indemnity
 
@@ -150,17 +153,17 @@ licensors from third-party claims, proceedings, damages, losses, liabilities,
 penalties, and reasonable legal costs arising from your Content, your breach of
 these Terms, your infringement of another person’s rights, or your unlawful or
 unauthorised use of the App. This does not require you to indemnify a party for
-its own fraud, wilful misconduct, or gross negligence. We may control the
-defence and settlement, but will not agree to a settlement admitting fault by
-you or imposing a non-monetary obligation on you without your consent.
+its own fraud, wilful misconduct, or gross negligence, and does not restrict
+lawful use of the App under the MIT License. We may control the defence and
+settlement, but will not agree to a settlement admitting fault by you or
+imposing a non-monetary obligation on you without your consent.
 
 ## 12. Termination
 
-You may terminate these Terms by stopping use and deleting your copies. Your
-licence terminates automatically if you materially breach these Terms. On
-termination you must stop using the App. Provisions that by nature should
-survive—including ownership, disclaimers, liability limits, indemnity, and
-dispute provisions—continue to apply.
+You may stop using the App at any time. If you materially breach these Terms,
+you must stop using the App. Provisions that by nature should survive—including
+disclaimers, liability limits, indemnity, and dispute provisions—continue to
+apply.
 
 ## 13. Governing law and disputes
 
@@ -175,14 +178,14 @@ Regulator, or another competent authority.
 
 ## 14. General
 
-These Terms, the Privacy Notice, the proprietary licence, and applicable
-third-party notices are the entire agreement about the App. If a provision is
-unlawful or unenforceable, it will be limited to the minimum extent necessary
-and the rest remains effective. Our failure to enforce a term is not a waiver.
-You may not assign these Terms without our written consent; we may assign them
-as part of a business transfer or by operation of law. No person other than the
-parties and expressly protected indemnified parties has enforcement rights.
-Headings are for convenience. “Including” means “including without limitation”.
+These Terms, the Privacy Notice, the MIT License, and applicable third-party
+notices are the entire agreement about the App. If a provision is unlawful or
+unenforceable, it will be limited to the minimum extent necessary and the rest
+remains effective. Our failure to enforce a term is not a waiver. You may not
+assign these Terms without our written consent; we may assign them as part of a
+business transfer or by operation of law. No person other than the parties and
+expressly protected indemnified parties has enforcement rights. Headings are for
+convenience. “Including” means “including without limitation”.
 
 ## 15. Contact
 
@@ -190,4 +193,3 @@ For legal, copyright, privacy, or support enquiries, use the contact details at
 [worldbuild.io](https://worldbuild.io/) or [deac.online](https://deac.online/).
 Notices to you may be delivered in the App, with a distribution, or through the
 channel by which you contacted us.
-

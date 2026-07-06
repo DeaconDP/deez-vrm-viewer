@@ -1,37 +1,21 @@
-Deez VRM Viewer Proprietary Software Licence
-Version 1.0 — 3 July 2026
+MIT License
 
-Copyright © 2026 Dale Deacon, trading as Worldbuild.io. All rights reserved.
+Copyright (c) 2026 Dale Deacon
 
-This software, including its source code, design, branding, documentation,
-compiled assets, and all original content (the “Software”), is proprietary.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Subject to the Terms of Use supplied with the Software, the copyright owner
-grants an individual end user a limited, revocable, non-exclusive,
-non-transferable, non-sublicensable licence to install and use an authorised
-copy of the Software for personal or internal business purposes.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Except where applicable law expressly permits it notwithstanding this licence,
-you may not copy, distribute, sell, rent, lease, sublicense, publish, host as a
-service, modify, create derivative works from, reverse engineer, decompile,
-disassemble, remove proprietary notices from, or otherwise exploit the
-Software without the copyright owner's prior written permission.
-
-This licence does not grant any rights in user-supplied VRM, GLB, glTF, image,
-or other content. You are solely responsible for obtaining and complying with
-the rights and permissions applicable to that content.
-
-Third-party components remain licensed by their respective owners under the
-terms reproduced or identified in THIRD_PARTY_NOTICES.md. Those third-party
-terms govern those components and are not restricted by this licence.
-
-The Software is provided subject to the warranty disclaimers, liability limits,
-and other provisions in TERMS.md. This licence terminates automatically if you
-materially breach it. On termination, you must stop using and delete all copies
-of the Software in your possession or control.
-
-No trademark licence is granted. “Deez VRM Viewer”, Worldbuild.io,
-deac.online, their logos, and related branding may not be used in a way that
-suggests sponsorship, endorsement, or affiliation without prior written
-permission.
-
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
