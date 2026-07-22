@@ -9,19 +9,19 @@ This notice explains how Dale Deacon, trading as Worldbuild.io and deac.online
 
 The current App is local-first. It has no Provider-operated account, analytics,
 advertising, telemetry, tracking pixel, or cloud upload. Model files selected
-from your device are processed in your browser and are not intentionally sent
+from your device are processed on this device and are not intentionally sent
 to us. The App cannot promise that other parties—such as a remote model host,
-website host, browser vendor, operating system, network administrator, or app
+website host, browser or WebView vendor, operating system, network administrator, or app
 distribution platform—collect nothing.
 
 ## Information processed on your device
 
 The App processes the model files and URLs you choose, including their names,
 metadata, textures, geometry, licence information, and any personal information
-embedded in them. This processing occurs transiently in browser memory so the
+embedded in them. This processing occurs transiently in app memory so the
 App can render and inspect the model. Files are not intentionally uploaded to
 or stored by the Provider. Closing/reloading the App releases transient data,
-subject to ordinary browser and operating-system behaviour.
+subject to ordinary WebView and operating-system behaviour.
 
 The App may store only the following on your device:
 
@@ -33,9 +33,9 @@ the installed PWA. Screenshots are saved only when and where you direct.
 
 ## Public URLs and third parties
 
-When you enter a public model URL, your browser makes a direct request to that
-remote server. The server may receive your IP address, user-agent or browser
-details, request time, referrer information (depending on browser policy), and
+When you enter a public model URL, the App makes a direct request to that
+remote server. The server may receive your IP address, user-agent or client
+details, request time, referrer information (depending on client policy), and
 the requested URL. The remote operator determines why and how it handles that
 data. Review its privacy policy before proceeding. The Provider does not
 receive that request merely because you used the App.
@@ -74,7 +74,7 @@ safeguards.
 ## Security
 
 Local processing reduces—but does not eliminate—risk. No software, device, or
-transmission is completely secure. Keep your browser and operating system
+transmission is completely secure. Keep your app runtime and operating system
 updated, obtain models only from sources you trust, and avoid remote URLs that
 contain secret tokens or personal information.
 

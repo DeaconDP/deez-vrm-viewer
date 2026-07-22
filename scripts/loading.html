@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Deez VRM Viewer</title>
+  <HTA:APPLICATION
+    ID="DeezVrmSplash"
+    APPLICATIONNAME="Deez VRM Viewer"
+    BORDER="thin"
+    BORDERSTYLE="static"
+    CAPTION="yes"
+    SHOWINTASKBAR="yes"
+    SINGLEINSTANCE="yes"
+    SYSMENU="yes"
+    SCROLL="no"
+    WINDOWSTATE="normal"
+  />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #121417;
+      color: #e9edf1;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    .stage {
+      position: relative;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      padding: 28px 28px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 14px;
+      background:
+        radial-gradient(ellipse at 50% 18%, rgba(242, 147, 67, 0.14), transparent 42%),
+        linear-gradient(180deg, #161a1f 0%, #121417 55%, #0e1013 100%);
+    }
+    .stage:before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .scan {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: linear-gradient(180deg, transparent, rgba(242, 147, 67, 0.08), transparent);
+      animation: scan 3.2s linear infinite;
+      pointer-events: none;
+    }
+    .brand {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+    }
+    .brand .mark {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1.15;
+    }
+    .brand .mark b {
+      color: #f29343;
+      font-weight: 700;
+    }
+    .brand .sub {
+      margin: 8px 0 0;
+      color: #717984;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+    .status-row {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .status {
+      margin: 0;
+      color: #aab1ba;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+    .percent {
+      margin: 0;
+      color: #ffb468;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      font-weight: 700;
+      flex: none;
+    }
+    .bar {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #f29343, #ffb468);
+    }
+    @keyframes scan {
+      0% { top: -48px; }
+      100% { top: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="scan"></div>
+    <div class="brand">
+      <p class="mark">Deez <b>VRM</b> Viewer</p>
+      <p class="sub">Local first</p>
+    </div>
+    <div class="status-row">
+      <p class="status" id="status">Starting...</p>
+      <p class="percent" id="percent">0%</p>
+    </div>
+    <div class="bar"><i id="barFill"></i></div>
+  </div>
+  <script type="text/javascript">
+    (function () {
+      var statusEl = document.getElementById("status");
+      var percentEl = document.getElementById("percent");
+      var barFill = document.getElementById("barFill");
+      var closed = false;
+      var lastProgress = -1;
+      var lastStatus = "";
+      var fso;
+
+      try {
+        fso = new ActiveXObject("Scripting.FileSystemObject");
+      } catch (err) {
+        statusEl.innerText = "Starting...";
+        return;
+      }
+
+      function htaPath() {
+        var href = String(location.href || "");
+        href = href.replace(/^file:\/\/\//i, "").replace(/^file:\/\//i, "");
+        try { href = decodeURIComponent(href); } catch (e) {}
+        href = href.replace(/\//g, "\\");
+        if (/^\\[A-Za-z]:\\/.test(href)) href = href.substring(1);
+        return href;
+      }
+
+      function runPath(name) {
+        var file = htaPath();
+        var scriptsDir = fso.GetParentFolderName(file);
+        var root = fso.GetParentFolderName(scriptsDir);
+        return fso.BuildPath(root, ".run\\" + name);
+      }
+
+      function readFirstLine(path) {
+        if (!fso.FileExists(path)) return "";
+        var file = fso.OpenTextFile(path, 1);
+        var text = "";
+        try {
+          if (!file.AtEndOfStream) text = file.ReadLine();
+        } catch (e) {
+          text = "";
+        }
+        file.Close();
+        return String(text).replace(/^\s+|\s+$/g, "");
+      }
+
+      function setProgress(raw) {
+        var n = parseInt(raw, 10);
+        if (isNaN(n)) n = 0;
+        if (n < 0) n = 0;
+        if (n > 100) n = 100;
+        if (n === lastProgress) return;
+        lastProgress = n;
+        percentEl.innerText = String(n) + "%";
+        barFill.style.width = String(n) + "%";
+      }
+
+      function setStatus(text) {
+        if (!text || text === lastStatus) return;
+        lastStatus = text;
+        statusEl.innerText = text;
+      }
+
+      function maybeClose(text) {
+        if (closed) return;
+        if (text === "Ready" || text === "ERROR") {
+          closed = true;
+          if (text === "Ready") setProgress("100");
+          window.setTimeout(function () {
+            try { window.close(); } catch (e) {}
+          }, text === "Ready" ? 400 : 80);
+        }
+      }
+
+      function tick() {
+        try {
+          setProgress(readFirstLine(runPath("progress.txt")));
+          var status = readFirstLine(runPath("status.txt"));
+          setStatus(status || "Starting...");
+          maybeClose(status);
+        } catch (e) {}
+        if (!closed) window.setTimeout(tick, 200);
+      }
+
+      window.resizeTo(520, 200);
+      try {
+        window.moveTo(
+          Math.max(0, (screen.availWidth - 520) / 2),
+          Math.max(0, (screen.availHeight - 200) / 2)
+        );
+      } catch (e) {}
+
+      setStatus("Starting...");
+      setProgress("0");
+      tick();
+    })();
+  </script>
+</body>
+</html>

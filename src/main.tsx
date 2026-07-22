@@ -9,12 +9,16 @@ import type { ComponentChildren } from 'preact';
 import type { AnimationLoopMode, AnimationState, LoadState, ModelSummary, TreeItem } from './types';
 import { BAKE_LIMITS, type BakeStage, type BakeStats, type BakeWorkerResponse } from './bake/types';
 import { validateModelFile } from './platform/files';
+import { installDesktopBridge } from './platform/desktopBridge';
+import { saveLocalFile } from './platform/exportFile';
 import { QUATERNIUS_LIBRARIES } from './viewer/quaterniusAnimations';
 import termsUrl from '../TERMS.md?url';
 import privacyUrl from '../PRIVACY.md?url';
 import licenseUrl from '../LICENSE?url';
 import noticesUrl from '../THIRD_PARTY_NOTICES.md?url';
 import './styles.css';
+
+installDesktopBridge();
 
 type Controller = import('./viewer/ViewerController').ViewerController;
 type BuiltInAnimationId = import('./viewer/ViewerController').BuiltInAnimationId;
@@ -156,6 +160,7 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
   return <div class="panel-content animation-panel">
     <div class="panel-heading"><div><span class="eyebrow">MOTION LAB</span><h2>Animation Preview</h2></div><Play /></div>
     <div class={`compatibility ${compatible ? 'ok' : ''}`}><span class="status-dot" /><div><b>{compatible ? 'VRM humanoid ready' : model ? 'Retargeting unavailable' : 'Open a VRM model first'}</b><small>{compatible ? 'Motions will be mapped through standard humanoid bones.' : 'VRMA previews need a VRM 0.x or 1.0 humanoid.'}</small></div></div>
+    {!!model?.unsyncedDetachedSkeletons && <p class="inline-error" role="status"><b>Detached clothing or hair may stay in bind pose.</b> {model.unsyncedDetachedSkeletons} secondary skeleton{model.unsyncedDetachedSkeletons === 1 ? '' : 's'} could not be matched to the humanoid chain. Try Bake Meshes, or re-export with matching bone names.</p>}
 
     <div class="process-block">
       <span class="process-number">1</span><div class="process-copy"><b>Choose the motion</b><p>Pick from 86 animations across the bundled Universal Animation Library 1 and 2 Standard packs.</p></div>
@@ -194,6 +199,7 @@ function AnimationPanel({ model, animation, speed, loop, inPlace, onPreset, onIm
 function BakePanel({ model, source, bake, mergeMeshes, onMergeMeshes, onBake, onCancel }: { model: ModelSummary | null; source: File | null; bake: BakeUiState; mergeMeshes: boolean; onMergeMeshes: (value: boolean) => void; onBake: () => void; onCancel: () => void }) {
   const eligible = model?.format === 'VRM' && !!source && /\.vrm$/i.test(source.name);
   const busy = bake.status === 'reading' || bake.status === 'working';
+  const unrepaired = bake.stats?.unrepairedDetachedSkins ?? 0;
   return <div class="panel-content bake-panel">
     <div class="panel-heading"><div><span class="eyebrow">REPAIR LAB</span><h2>Bake Meshes</h2></div><Hammer /></div>
     <div class={`compatibility ${eligible ? 'ok' : ''}`}><span class="status-dot" /><div><b>{eligible ? 'Local VRM ready' : model ? 'This source is view-only' : 'Open a local VRM first'}</b><small>{eligible ? 'The source file is read-only and will never be overwritten.' : 'Beta baking requires a binary .vrm chosen from this device.'}</small></div></div>
@@ -216,12 +222,13 @@ function BakePanel({ model, source, bake, mergeMeshes, onMergeMeshes, onBake, on
     </div>
 
     <div class="process-block">
-      <span class="process-number">3</span><div class="process-copy"><b>Bake a new copy</b><p>The result downloads as <code>{source ? source.name.replace(/\.vrm$/i, '') + '-baked.vrm' : 'avatar-baked.vrm'}</code>. The open source remains your untouched original.</p></div>
+      <span class="process-number">3</span><div class="process-copy"><b>Bake a new copy</b><p>The result is saved as <code>{source ? source.name.replace(/\.vrm$/i, '') + '-baked.vrm' : 'avatar-baked.vrm'}</code>, then opened here for preview. Your original file is never overwritten.</p></div>
       {busy && <div class="bake-progress" role="status"><div><span>{bake.stage.replace('-', ' ')}</span><output>{Math.round(bake.progress * 100)}%</output></div><div class="progress"><i style={{ width: `${Math.max(4, bake.progress * 100)}%` }} /></div><small>{bake.detail}</small></div>}
-      {bake.stats && <div class="bake-result"><ShieldCheck /><span><b>{bake.status === 'complete' ? 'Baked copy downloaded' : 'Preflight complete'}</b><small>{bake.stats.meshes} source meshes · {bake.stats.vertices.toLocaleString()} vertices{bake.stats.reconnectedSkins ? ` · ${bake.stats.reconnectedSkins} detached skins reconnected` : ''}{bake.stats.mergedMeshes !== undefined ? ` · ${bake.stats.mergedMeshes} nodes + ${bake.stats.mergedPrimitives ?? 0} render meshes joined` : ''}</small></span></div>}
+      {bake.stats && <div class="bake-result"><ShieldCheck /><span><b>{bake.status === 'complete' ? 'Baked copy saved and opened' : 'Preflight complete'}</b><small>{bake.stats.meshes} source meshes · {bake.stats.vertices.toLocaleString()} vertices{bake.stats.reconnectedSkins ? ` · ${bake.stats.reconnectedSkins} detached skins reconnected` : ''}{bake.stats.mergedMeshes !== undefined ? ` · ${bake.stats.mergedMeshes} nodes + ${bake.stats.mergedPrimitives ?? 0} render meshes joined` : ''}</small></span></div>}
+      {unrepaired > 0 && <p class="inline-error" role="status"><b>{unrepaired} detached skin{unrepaired === 1 ? '' : 's'} could not be reconnected.</b> Clothing or hair may stay in bind pose during animation because joints did not match the humanoid chain by name or rest pose{bake.stats?.unrepairedJointNames?.length ? <> — sample bones: <code>{bake.stats.unrepairedJointNames.join(', ')}</code></> : ''}.</p>}
       {bake.error && <p class="inline-error">{bake.error}</p>}
       {busy ? <button class="secondary wide" onClick={onCancel}><X /> Cancel baking</button> : <button class="primary wide" disabled={!eligible} onClick={onBake}><Download /> Bake and download VRM</button>}
-      <p class="process-note"><Eye /> Processing and download creation stay entirely on this device.</p>
+      <p class="process-note"><Eye /> Processing and save stay entirely on this device.</p>
     </div>
   </div>;
 }
@@ -279,8 +286,9 @@ function App() {
     try { const result = await controller.current.load(url, name, size, setProgress); setModel(result); setState('ready'); setSelected(null); return true; }
     catch (reason) { console.error(reason); setError(reason instanceof Error ? reason.message : String(reason)); setState('error'); setModel(null); return false; }
   };
-  const openFile = async (file: File) => {
-    cancelBake(false); setSourceFile(null);
+  const openFile = async (file: File, options?: { preserveBake?: boolean }) => {
+    if (!options?.preserveBake) cancelBake(false);
+    setSourceFile(null);
     const validationError = await validateModelFile(file);
     if (validationError) { setError(validationError); setState('error'); return; }
     if (file.size > 250 * 1024 * 1024 && !confirm(`${file.name} is larger than 250 MB and may exhaust graphics memory. Open it anyway?`)) return;
@@ -315,7 +323,28 @@ function App() {
   const onDrop = (event: DragEvent) => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (file) void openFile(file); };
   const expression = (name: string, value: number) => { setExpressionValues(old => ({ ...old, [name]: value })); controller.current?.setExpression(name, value); };
   const resetExpressions = () => { setExpressionValues({}); controller.current?.resetExpressions(); };
-  const screenshot = (transparent: boolean, scale: number) => { const anchor = document.createElement('a'); anchor.download = `${model?.name ?? 'deez-vrm'}-${Date.now()}.png`; anchor.href = controller.current?.capture(transparent, scale) ?? ''; anchor.click(); setCaptureOpen(false); };
+  const screenshot = (transparent: boolean, scale: number) => {
+    const dataUrl = controller.current?.capture(transparent, scale) ?? '';
+    if (!dataUrl) return;
+    const fileName = `${model?.name ?? 'deez-vrm'}-${Date.now()}.png`;
+    void (async () => {
+      try {
+        const bytes = new Uint8Array(await (await fetch(dataUrl)).arrayBuffer());
+        const result = await saveLocalFile({
+          bytes,
+          fileName,
+          mimeType: 'image/png',
+          title: 'Save screenshot',
+          filters: [{ name: 'PNG image', extensions: ['png'] }]
+        });
+        if (!result.saved) return;
+      } catch (reason) {
+        console.error(reason);
+      } finally {
+        setCaptureOpen(false);
+      }
+    })();
+  };
   const choosePreset = (id: BuiltInAnimationId) => { void controller.current?.loadBuiltInAnimation(id).catch(reason => setAnimation(old => ({ ...old, error: reason instanceof Error ? reason.message : String(reason) }))); };
   const openAnimation = async (file: File) => {
     if (!/\.vrma$/i.test(file.name)) { setAnimation(old => ({ ...old, error: 'Choose a .vrma file. GLB and FBX motions must be converted to VRMA first.' })); return; }
@@ -374,10 +403,45 @@ function App() {
         if (message.type === 'progress') setBake(old => ({ ...old, status: 'working', stage: message.stage, progress: message.progress, detail: message.detail, stats: message.stats ?? old.stats, error: '' }));
         else if (message.type === 'complete') {
           worker.terminate(); bakeWorker.current = null;
-          const url = URL.createObjectURL(new Blob([message.buffer], { type: 'model/gltf-binary' }));
-          const anchor = document.createElement('a'); anchor.href = url; anchor.download = message.fileName; anchor.click();
-          setTimeout(() => URL.revokeObjectURL(url), 30_000);
-          setBake({ status: 'complete', stage: 'download', progress: 1, detail: 'The baked copy was sent to your downloads.', error: '', stats: message.stats });
+          const stats = message.stats;
+          setBake(old => ({ ...old, status: 'working', stage: 'download', progress: 0.98, detail: 'Choose where to save the baked VRM…', stats, error: '' }));
+          void (async () => {
+            try {
+              const bytes = new Uint8Array(message.buffer);
+              const result = await saveLocalFile({
+                bytes,
+                fileName: message.fileName,
+                mimeType: 'model/gltf-binary',
+                title: 'Save baked VRM',
+                filters: [{ name: 'VRM', extensions: ['vrm'] }]
+              });
+              if (generation !== bakeGeneration.current) return;
+              if (!result.saved) {
+                setBake(EMPTY_BAKE);
+                return;
+              }
+              setBake({
+                status: 'complete',
+                stage: 'download',
+                progress: 1,
+                detail: result.path ? `Saved to ${result.path}` : 'The baked copy was sent to your downloads.',
+                error: '',
+                stats
+              });
+              const bakedFile = new File([bytes.slice()], message.fileName, { type: 'model/gltf-binary' });
+              await openFile(bakedFile, { preserveBake: true });
+            } catch (reason) {
+              if (generation !== bakeGeneration.current) return;
+              setBake({
+                status: 'error',
+                stage: 'download',
+                progress: 0.98,
+                detail: '',
+                error: reason instanceof Error ? reason.message : String(reason),
+                stats
+              });
+            }
+          })();
         } else if (message.type === 'error') {
           worker.terminate(); bakeWorker.current = null;
           setBake(old => ({ ...old, status: 'error', error: message.message, detail: '' }));

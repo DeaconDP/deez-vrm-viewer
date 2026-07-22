@@ -122,10 +122,10 @@ export class ViewerController {
     this.model = this.vrm?.scene ?? gltf.scene;
     if (this.vrm) {
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
-      const rawBones = Object.values(this.vrm.humanoid.rawHumanBones).flatMap(bone => bone ? [bone.node] : []);
-      this.duplicateBoneSync = new DuplicateBoneSync(this.vrm.scene, rawBones);
       VRMUtils.combineSkeletons(gltf.scene);
       VRMUtils.rotateVRM0(this.vrm);
+      const humanoidBones = Object.entries(this.vrm.humanoid.rawHumanBones).flatMap(([boneName, bone]) => bone ? [{ boneName, node: bone.node }] : []);
+      this.duplicateBoneSync = new DuplicateBoneSync(this.vrm.scene, humanoidBones);
       this.duplicateBoneSync.update();
       this.mixer = new THREE.AnimationMixer(this.vrm.scene);
       this.mixer.addEventListener('finished', this.onAnimationFinished);
@@ -160,7 +160,8 @@ export class ViewerController {
       name: normalMeta?.name || normalMeta?.title || fileName.replace(/\.(vrm|glb|gltf)$/i, ''), format: this.vrm ? 'VRM' : 'glTF', version,
       generator: gltf.parser.json.asset?.generator ?? 'Not specified', size, loadMs: performance.now() - started,
       nodes, meshes, triangles: Math.round(triangles), materials: materials.size, textures: textures.size, bones, expressions,
-      authors: normalMeta?.authors ?? (normalMeta?.author ? [normalMeta.author] : []), license: normalMeta?.licenseUrl ?? normalMeta?.otherLicenseUrl ?? 'Not specified', items
+      authors: normalMeta?.authors ?? (normalMeta?.author ? [normalMeta.author] : []), license: normalMeta?.licenseUrl ?? normalMeta?.otherLicenseUrl ?? 'Not specified', items,
+      unsyncedDetachedSkeletons: this.duplicateBoneSync?.unsyncedDetachedSkeletons || undefined
     };
   }
 

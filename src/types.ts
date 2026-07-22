@@ -36,4 +36,6 @@ export interface ModelSummary {
   authors: string[];
   license: string;
   items: TreeItem[];
+  /** Detached clothing/hair skeletons that could not be pose-synced. */
+  unsyncedDetachedSkeletons?: number;
 }

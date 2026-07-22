@@ -12,6 +12,8 @@ export interface BakeStats {
   skins: number;
   reconnectedSkins?: number;
   remappedJoints?: number;
+  unrepairedDetachedSkins?: number;
+  unrepairedJointNames?: string[];
   mergedMeshes?: number;
   mergedPrimitives?: number;
 }

@@ -2,8 +2,24 @@ import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const STICKY_PORT = 5188;
+
 export default defineConfig(({ mode }) => ({
   base: './',
+  clearScreen: false,
+  server: {
+    host: '127.0.0.1',
+    port: STICKY_PORT,
+    strictPort: true,
+    watch: {
+      ignored: ['**/src-tauri/**']
+    }
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: STICKY_PORT,
+    strictPort: true
+  },
   plugins: [
     preact(),
     ...(mode === 'desktop' ? [] : [VitePWA({

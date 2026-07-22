@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BoneNameLookup, canReconnectDetachedMatches, matchByProximity, proximityMatchDistance } from './boneNameMatch';
 
 interface TransformSnapshot {
   position: THREE.Vector3;
@@ -13,6 +14,11 @@ interface BonePair {
   targetRest: TransformSnapshot;
 }
 
+export interface HumanoidBoneEntry {
+  boneName: string;
+  node: THREE.Object3D;
+}
+
 function snapshot(node: THREE.Object3D): TransformSnapshot {
   return {
     position: node.position.clone(),
@@ -21,23 +27,43 @@ function snapshot(node: THREE.Object3D): TransformSnapshot {
   };
 }
 
+function worldPoint(node: THREE.Object3D) {
+  node.updateWorldMatrix(true, false);
+  const position = new THREE.Vector3();
+  node.getWorldPosition(position);
+  return { x: position.x, y: position.y, z: position.z };
+}
+
+function humanoidModelHeight(humanoidBones: HumanoidBoneEntry[]) {
+  const hips = humanoidBones.find(entry => entry.boneName === 'hips')?.node;
+  const head = humanoidBones.find(entry => entry.boneName === 'head')?.node;
+  if (hips && head) {
+    const height = Math.abs(worldPoint(head).y - worldPoint(hips).y);
+    if (height > 1e-3) return height;
+  }
+  return 1.6;
+}
+
 /**
  * Mirrors humanoid pose deltas into detached exporter-created armatures.
- * Matching is deliberately conservative: only bones used by a SkinnedMesh and
- * sharing a unique exact name with a canonical raw humanoid bone are touched.
+ * Matching mirrors bake reconnect: name/alias/suffix or rest-pose proximity,
+ * with a ≥3 chain or a single core torso/head accessory anchor.
  */
 export class DuplicateBoneSync {
   private readonly pairs: BonePair[];
   private readonly rotationDelta = new THREE.Quaternion();
   private readonly positionDelta = new THREE.Vector3();
+  readonly unsyncedDetachedSkeletons: number;
 
-  constructor(root: THREE.Object3D, canonicalBones: THREE.Object3D[]) {
-    const names = new Map<string, THREE.Object3D | null>();
-    for (const bone of canonicalBones) {
-      if (!bone.name) continue;
-      for (const name of new Set([bone.name, bone.name.replace(/_\d+$/, '')])) {
-        names.set(name, names.has(name) ? null : bone);
-      }
+  constructor(root: THREE.Object3D, humanoidBones: HumanoidBoneEntry[]) {
+    const lookup = new BoneNameLookup<THREE.Object3D>();
+    const boneNameByNode = new Map<THREE.Object3D, string>();
+    const canonicalBones: THREE.Object3D[] = [];
+    for (const { boneName, node } of humanoidBones) {
+      if (!node) continue;
+      canonicalBones.push(node);
+      boneNameByNode.set(node, boneName);
+      lookup.register({ boneName, name: node.name, value: node });
     }
 
     const canonicalSet = new Set(canonicalBones), skeletons = new Set<THREE.Skeleton>();
@@ -46,23 +72,56 @@ export class DuplicateBoneSync {
       if (mesh.isSkinnedMesh) skeletons.add(mesh.skeleton);
     });
 
+    const maxDistance = proximityMatchDistance(humanoidModelHeight(humanoidBones));
+    const canonicalTargets = canonicalBones.map(node => ({ id: node, point: worldPoint(node) }));
+
     this.pairs = [];
     const added = new Set<THREE.Object3D>();
+    let unsynced = 0;
     for (const skeleton of skeletons) {
-      const matches = skeleton.bones.flatMap(target => {
-        // GLTFLoader suffixes repeated node names (e.g. Head_1, Head_2) to
-        // keep animation bindings unique. The source JSON names remain exact.
-        const deduplicatedName = target.name.replace(/_\d+$/, '');
-        const source = names.get(target.name) ?? names.get(deduplicatedName);
-        return source && source !== target && !canonicalSet.has(target) ? [{ source, target }] : [];
+      const nonCanonical = skeleton.bones.filter(bone => !canonicalSet.has(bone));
+      if (!nonCanonical.length) continue;
+      const fullyDetached = !skeleton.bones.some(bone => canonicalSet.has(bone));
+
+      const matches: { source: THREE.Object3D; target: THREE.Object3D }[] = [];
+      const unmatched: THREE.Object3D[] = [];
+      for (const target of nonCanonical) {
+        const source = lookup.resolve(target.name);
+        if (source && source !== target) matches.push({ source, target });
+        else unmatched.push(target);
+      }
+
+      {
+        const usedSources = new Set(matches.map(pair => pair.source));
+        const spatial = matchByProximity(
+          unmatched.map(target => ({ id: target, point: worldPoint(target) })),
+          canonicalTargets.filter(target => !usedSources.has(target.id)),
+          maxDistance
+        );
+        for (const { source, target } of spatial) matches.push({ source: target, target: source });
+      }
+
+      const matchedBoneNames = matches.flatMap(pair => {
+        const boneName = boneNameByNode.get(pair.source);
+        return boneName ? [boneName] : [];
       });
-      if (matches.length < 3) continue;
+      const unmatchedAfter = nonCanonical
+        .filter(bone => !matches.some(pair => pair.target === bone))
+        .map(bone => bone.name);
+
+      if (!canReconnectDetachedMatches(matchedBoneNames, unmatchedAfter)) {
+        // Hybrid skins that already include humanoid joints plus secondary
+        // hair/cloth bones are expected; only fully detached leftovers warn.
+        if (fullyDetached) unsynced++;
+        continue;
+      }
       for (const { source, target } of matches) {
         if (added.has(target)) continue;
         added.add(target);
         this.pairs.push({ source, target, sourceRest: snapshot(source), targetRest: snapshot(target) });
       }
     }
+    this.unsyncedDetachedSkeletons = unsynced;
   }
 
   get count() { return this.pairs.length; }

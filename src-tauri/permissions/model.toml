@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-read-model-file"
+description = "Allows reading a user-selected VRM or glTF model into the viewer."
+commands.allow = ["read_model_file"]
+
+[[permission]]
+identifier = "allow-take-pending-model-path"
+description = "Allows the frontend to claim a pending model path from OS open or a second instance."
+commands.allow = ["take_pending_model_path"]
+
+[[permission]]
+identifier = "allow-write-export-file"
+description = "Allows writing a user-chosen baked VRM or screenshot PNG export."
+commands.allow = ["write_export_file"]

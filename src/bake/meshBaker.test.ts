@@ -127,6 +127,72 @@ function detachedRigFixture() {
   return makeGlb(json, binary.buffer);
 }
 
+function aliasedDetachedRigFixture() {
+  const glb = detachedRigFixture(), parsed = parseGlb(glb), json = parsed.json;
+  json.nodes[1].name = 'J_Bip_C_Hips';
+  json.nodes[4].name = 'J_Bip_C_Spine';
+  json.nodes[5].name = 'J_Bip_C_Chest';
+  json.nodes[6].name = 'Hips';
+  json.nodes[7].name = 'Spine';
+  json.nodes[8].name = 'Chest';
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
+function suffixDetachedRigFixture() {
+  const glb = detachedRigFixture(), parsed = parseGlb(glb), json = parsed.json;
+  json.nodes[1].name = 'J_Bip_C_Hips';
+  json.nodes[4].name = 'J_Bip_C_Spine';
+  json.nodes[5].name = 'J_Bip_C_Chest';
+  json.nodes[6].name = 'Coat_Hips';
+  json.nodes[7].name = 'Jacket.Spine';
+  json.nodes[8].name = 'Vest_Chest';
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
+function spatialDetachedRigFixture() {
+  const glb = detachedRigFixture(), parsed = parseGlb(glb), json = parsed.json;
+  json.extensions.VRMC_vrm.humanoid.humanBones.head = { node: 10 };
+  json.nodes[1].name = 'BodyHips';
+  json.nodes[1].translation = [0, 1, 0];
+  json.nodes[4].name = 'BodySpine';
+  json.nodes[4].translation = [0, 0.25, 0];
+  json.nodes[5].name = 'BodyChest';
+  json.nodes[5].translation = [0, 0.25, 0];
+  json.nodes[5].children = [10];
+  json.nodes[6].name = 'ClothA';
+  json.nodes[6].translation = [0, 1, 0];
+  json.nodes[7].name = 'ClothB';
+  json.nodes[7].translation = [0, 0.25, 0];
+  json.nodes[8].name = 'ClothC';
+  json.nodes[8].translation = [0, 0.25, 0];
+  json.nodes.push({ name: 'BodyHead', translation: [0, 0.4, 0] });
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
+function unrepairedDetachedRigFixture() {
+  const glb = detachedRigFixture(), parsed = parseGlb(glb), json = parsed.json;
+  json.nodes[6].name = 'CoatRoot';
+  json.nodes[6].translation = [10, 10, 10];
+  json.nodes[7].name = 'CoatMid';
+  json.nodes[7].translation = [0, 1, 0];
+  json.nodes[8].name = 'CoatTip';
+  json.nodes[8].translation = [0, 1, 0];
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
+function hairAccessoryRigFixture() {
+  const glb = detachedRigFixture(), parsed = parseGlb(glb), json = parsed.json;
+  json.extensions.VRMC_vrm.humanoid.humanBones.head = { node: 10 };
+  json.nodes[5].children = [10];
+  json.nodes.push({ name: 'Head', translation: [0, 0.4, 0] });
+  json.nodes[6] = { name: 'Head', children: [7, 8], translation: [0, 0.4, 0] };
+  json.nodes[7] = { name: 'HairA', translation: [0.1, 0.1, 0] };
+  json.nodes[8] = { name: 'HairB', translation: [-0.1, 0.1, 0] };
+  json.skins[1] = { joints: [6, 7, 8], skeleton: 6, inverseBindMatrices: json.skins[1].inverseBindMatrices };
+  json.accessors[json.skins[1].inverseBindMatrices].count = 3;
+  return makeGlb(json, parsed.source.slice(parsed.bin.offset, parsed.bin.offset + parsed.bin.length));
+}
+
 describe('mesh baker', () => {
   it('names output without overwriting the source', () => {
     expect(bakedFileName('Avatar.VRM')).toBe('Avatar-baked.vrm');
@@ -199,10 +265,59 @@ describe('mesh baker', () => {
     const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
     expect(result.stats.reconnectedSkins).toBe(1);
     expect(result.stats.remappedJoints).toBe(3);
+    expect(result.stats.unrepairedDetachedSkins).toBeUndefined();
     expect(detached.joints).toEqual([1, 4, 5, 9]);
     expect(detached.skeleton).toBe(1);
     expect(parsed.json.nodes[5].children).toContain(9);
     expect(parsed.json.nodes[8].children ?? []).not.toContain(9);
+  });
+
+  it('reconnects clothing bones matched through humanoid aliases', () => {
+    const result = bakeVrm(aliasedDetachedRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
+    expect(result.stats.reconnectedSkins).toBe(1);
+    expect(result.stats.remappedJoints).toBe(3);
+    expect(detached.joints).toEqual([1, 4, 5, 9]);
+    expect(detached.skeleton).toBe(1);
+  });
+
+  it('reconnects clothing bones matched through name suffixes', () => {
+    const result = bakeVrm(suffixDetachedRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
+    expect(result.stats.reconnectedSkins).toBe(1);
+    expect(result.stats.remappedJoints).toBe(3);
+    expect(detached.joints).toEqual([1, 4, 5, 9]);
+  });
+
+  it('reconnects clothing bones matched by rest-pose proximity', () => {
+    const result = bakeVrm(spatialDetachedRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
+    expect(result.stats.reconnectedSkins).toBe(1);
+    expect(result.stats.remappedJoints).toBe(3);
+    expect(detached.joints).toEqual([1, 4, 5, 9]);
+    expect(detached.skeleton).toBe(1);
+  });
+
+  it('reports detached skins that cannot be reconnected', () => {
+    const result = bakeVrm(unrepairedDetachedRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer);
+    expect(result.stats.reconnectedSkins).toBeUndefined();
+    expect(result.stats.unrepairedDetachedSkins).toBe(1);
+    expect(result.stats.unrepairedJointNames).toEqual(expect.arrayContaining(['CoatRoot', 'CoatMid', 'CoatTip']));
+    expect(parsed.json.skins[1].joints).toEqual([6, 7, 8, 9]);
+  });
+
+  it('reconnects hair accessories that only share a head anchor', () => {
+    const result = bakeVrm(hairAccessoryRigFixture(), 'avatar.vrm');
+    const parsed = parseGlb(result.buffer), detached = parsed.json.skins[1];
+    expect(result.stats.reconnectedSkins).toBe(1);
+    expect(result.stats.remappedJoints).toBe(1);
+    expect(result.stats.unrepairedDetachedSkins).toBeUndefined();
+    expect(detached.joints).toEqual([10, 7, 8]);
+    expect(detached.skeleton).toBe(10);
+    expect(parsed.json.nodes[10].children).toEqual(expect.arrayContaining([7, 8]));
+    expect(parsed.json.nodes[6].children ?? []).not.toContain(7);
+    expect(parsed.json.nodes[6].children ?? []).not.toContain(8);
   });
 
   it('keeps expression-bound meshes separate when merging is requested', () => {

@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 release/
+src-tauri/target/
+.run/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
@@ -26,6 +28,9 @@ vite.config.d.ts
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Launcher runtime
+.run/
 
 # Logs and diagnostics
 npm-debug.log*

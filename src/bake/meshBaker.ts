@@ -1,3 +1,4 @@
+import { BoneNameLookup, canReconnectDetachedMatches, matchByProximity, proximityMatchDistance, translationOfMatrix } from '../viewer/boneNameMatch';
 import { BAKE_LIMITS, type BakeOptions, type BakeResult, type BakeStage, type BakeStats } from './types';
 
 const GLB_MAGIC = 0x46546c67;
@@ -197,36 +198,99 @@ function buildHierarchy(nodes: Json[]) {
   return { parents, worlds };
 }
 
-function humanoidNodeIndexes(json: Json) {
+function humanoidBoneEntries(json: Json): { boneName: string; node: number }[] {
   const vrm1Bones = json.extensions?.VRMC_vrm?.humanoid?.humanBones;
-  if (vrm1Bones && !Array.isArray(vrm1Bones)) return Object.values(vrm1Bones).flatMap((bone: any) => Number.isInteger(bone?.node) ? [bone.node as number] : []);
+  if (vrm1Bones && !Array.isArray(vrm1Bones)) {
+    return Object.entries(vrm1Bones).flatMap(([boneName, bone]: [string, any]) => Number.isInteger(bone?.node) ? [{ boneName, node: bone.node as number }] : []);
+  }
   const vrm0Bones = json.extensions?.VRM?.humanoid?.humanBones;
-  if (Array.isArray(vrm0Bones)) return vrm0Bones.flatMap((bone: Json) => Number.isInteger(bone?.node) ? [bone.node as number] : []);
+  if (Array.isArray(vrm0Bones)) {
+    return vrm0Bones.flatMap((bone: Json) => Number.isInteger(bone?.node) && typeof bone?.bone === 'string' ? [{ boneName: bone.bone as string, node: bone.node as number }] : []);
+  }
   return [];
 }
 
-function repairDetachedSkeletons(json: Json, nodes: Json[], skins: Json[], skinInfos: SkinInfo[], worlds: Matrix[]) {
-  const canonicalNodes = new Set(humanoidNodeIndexes(json));
-  const candidates = new Map<string, number | null>();
-  for (const index of canonicalNodes) {
-    const name = nodes[index]?.name;
-    if (!name) continue;
-    candidates.set(name, candidates.has(name) ? null : index);
+function humanoidModelHeight(humanoid: { boneName: string; node: number }[], worlds: Matrix[]) {
+  const hips = humanoid.find(entry => entry.boneName === 'hips');
+  const head = humanoid.find(entry => entry.boneName === 'head');
+  if (hips && head && worlds[hips.node] && worlds[head.node]) {
+    const height = Math.abs(translationOfMatrix(worlds[head.node]).y - translationOfMatrix(worlds[hips.node]).y);
+    if (height > 1e-3) return height;
   }
+  return 1.6;
+}
 
-  let reconnectedSkins = 0, remappedJoints = 0;
+function repairDetachedSkeletons(json: Json, nodes: Json[], skins: Json[], skinInfos: SkinInfo[], worlds: Matrix[]) {
+  const humanoid = humanoidBoneEntries(json);
+  const canonicalNodes = new Set(humanoid.map(entry => entry.node));
+  const boneNameByNode = new Map(humanoid.map(entry => [entry.node, entry.boneName]));
+  if (!canonicalNodes.size) return { reconnectedSkins: 0, remappedJoints: 0, unrepairedDetachedSkins: 0, unrepairedJointNames: [] as string[] };
+
+  const lookup = new BoneNameLookup<number>();
+  const canonicalTargets = humanoid.flatMap(({ boneName, node }) => {
+    if (!nodes[node] || !worlds[node]) return [];
+    lookup.register({ boneName, name: nodes[node].name, value: node });
+    return [{ id: node, point: translationOfMatrix(worlds[node]) }];
+  });
+  const maxDistance = proximityMatchDistance(humanoidModelHeight(humanoid, worlds));
+
+  let reconnectedSkins = 0, remappedJoints = 0, unrepairedDetachedSkins = 0;
+  const unrepairedJointNames: string[] = [];
+  const rememberUnrepairedNames = (joints: number[]) => {
+    for (const joint of joints) {
+      const name = nodes[joint]?.name;
+      if (!name || unrepairedJointNames.includes(name)) continue;
+      unrepairedJointNames.push(name);
+      if (unrepairedJointNames.length >= 8) break;
+    }
+  };
+
   skinInfos.forEach((info, skinIndex) => {
+    const detachedJoints = info.joints.filter(joint => !canonicalNodes.has(joint));
+    if (!detachedJoints.length) return;
+    const fullyDetached = !info.joints.some(joint => canonicalNodes.has(joint));
+
     const replacement = new Map<number, number>();
-    for (const joint of info.joints) {
-      if (canonicalNodes.has(joint)) continue;
-      const canonical = candidates.get(nodes[joint]?.name);
+    for (const joint of detachedJoints) {
+      const canonical = lookup.resolve(nodes[joint]?.name);
       if (canonical != null) replacement.set(joint, canonical);
     }
-    // One coincidental bone name is not enough evidence that an auxiliary rig
-    // is a duplicate humanoid. Real split rigs carry a short matching chain.
-    if (replacement.size < 3) return;
+
+    {
+      const unmatched = detachedJoints.filter(joint => !replacement.has(joint));
+      const usedTargets = new Set(replacement.values());
+      const spatial = matchByProximity(
+        unmatched.filter(joint => worlds[joint]).map(joint => ({ id: joint, point: translationOfMatrix(worlds[joint]) })),
+        canonicalTargets.filter(target => !usedTargets.has(target.id)),
+        maxDistance
+      );
+      for (const { source, target } of spatial) replacement.set(source, target);
+    }
+
+    const matchedBoneNames = [...replacement.values()].flatMap(node => {
+      const boneName = boneNameByNode.get(node);
+      return boneName ? [boneName] : [];
+    });
+    const unmatchedNames = detachedJoints.filter(joint => !replacement.has(joint)).map(joint => nodes[joint]?.name);
+    // Full duplicate humanoid chains need ≥3 matches; hair/cloth accessories may
+    // only share a single core torso/head anchor plus secondary bones.
+    if (!canReconnectDetachedMatches(matchedBoneNames, unmatchedNames)) {
+      // Only warn for fully detached skins (no humanoid joints already). A main
+      // body skin that also carries secondary bones is expected to keep them.
+      if (fullyDetached) {
+        unrepairedDetachedSkins++;
+        rememberUnrepairedNames(detachedJoints);
+      }
+      return;
+    }
     const repairedJoints = info.joints.map(joint => replacement.get(joint) ?? joint);
-    if (new Set(repairedJoints).size !== repairedJoints.length) return;
+    if (new Set(repairedJoints).size !== repairedJoints.length) {
+      if (fullyDetached) {
+        unrepairedDetachedSkins++;
+        rememberUnrepairedNames(detachedJoints);
+      }
+      return;
+    }
 
     const jointSet = new Set(info.joints);
     for (const [detached, canonical] of replacement) {
@@ -248,7 +312,7 @@ function repairDetachedSkeletons(json: Json, nodes: Json[], skins: Json[], skinI
     reconnectedSkins++;
     remappedJoints += replacement.size;
   });
-  return { reconnectedSkins, remappedJoints };
+  return { reconnectedSkins, remappedJoints, unrepairedDetachedSkins, unrepairedJointNames };
 }
 
 function transformPoint(m: Matrix, v: number[]) {
@@ -497,23 +561,7 @@ export function bakeVrm(source: ArrayBuffer, fileName: string, progress: Progres
   const nodes: Json[] = json.nodes ?? [], meshes: Json[] = json.meshes ?? [], skins: Json[] = json.skins ?? [];
   if (!nodes.length || !meshes.length || !skins.length) fail('NO_SKINNED_MESHES', 'This VRM does not contain bakeable skinned meshes.');
 
-  const parents = new Array<number>(nodes.length).fill(-1);
-  nodes.forEach((node, parent) => (node.children ?? []).forEach((child: number) => {
-    if (!Number.isInteger(child) || !nodes[child]) fail('MALFORMED_GLB', 'The node hierarchy contains an invalid child reference.');
-    if (parents[child] !== -1) fail('UNSUPPORTED_HIERARCHY', 'A node has multiple parents and cannot be normalized safely.');
-    parents[child] = parent;
-  }));
-  const visiting = new Set<number>(), worlds = new Array<Matrix>(nodes.length);
-  const worldFor = (index: number): Matrix => {
-    if (worlds[index]) return worlds[index];
-    if (visiting.has(index)) fail('UNSUPPORTED_HIERARCHY', 'The node hierarchy contains a cycle.');
-    visiting.add(index);
-    const local = nodeMatrix(nodes[index]);
-    worlds[index] = parents[index] === -1 ? local : multiply(worldFor(parents[index]), local);
-    visiting.delete(index);
-    return worlds[index];
-  };
-  nodes.forEach((_, index) => worldFor(index));
+  let { parents, worlds } = buildHierarchy(nodes);
 
   const skinInfos: SkinInfo[] = skins.map((skin, skinIndex) => {
     if (!Array.isArray(skin.joints) || !skin.joints.length || skin.joints.length > BAKE_LIMITS.maxJointsPerSkin) fail('UNSUPPORTED_SKIN', `Skin ${skinIndex} must contain 1–256 joints.`);
@@ -554,6 +602,19 @@ export function bakeVrm(source: ArrayBuffer, fileName: string, progress: Progres
   if (vertexCount > BAKE_LIMITS.maxSkinnedVertices) fail('TOO_MANY_VERTICES', 'This VRM exceeds the 2 million skinned-vertex beta limit.');
   if (morphCount > BAKE_LIMITS.maxMorphVertexRecords) fail('TOO_MANY_MORPHS', 'This VRM exceeds the 8 million morph-record beta limit.');
   progress('preflight', 0.12, `Found ${targets.length} skinned mesh${targets.length === 1 ? '' : 'es'}`, stats);
+
+  const repair = repairDetachedSkeletons(json, nodes, skins, skinInfos, worlds);
+  if (repair.reconnectedSkins) {
+    stats.reconnectedSkins = repair.reconnectedSkins;
+    stats.remappedJoints = repair.remappedJoints;
+    progress('bind-poses', 0.14, `Reconnected ${repair.reconnectedSkins} detached skin${repair.reconnectedSkins === 1 ? '' : 's'} to the humanoid rig`, stats);
+    ({ parents, worlds } = buildHierarchy(nodes));
+  }
+  if (repair.unrepairedDetachedSkins) {
+    stats.unrepairedDetachedSkins = repair.unrepairedDetachedSkins;
+    if (repair.unrepairedJointNames.length) stats.unrepairedJointNames = repair.unrepairedJointNames;
+    progress('bind-poses', 0.15, `${repair.unrepairedDetachedSkins} detached skin${repair.unrepairedDetachedSkins === 1 ? '' : 's'} could not be reconnected`, stats);
+  }
 
   let completed = 0;
   for (const { node } of targets) {
@@ -639,22 +700,14 @@ export function bakeVrm(source: ArrayBuffer, fileName: string, progress: Progres
       }
       if (position.accessor.count) { position.accessor.min = positionMin; position.accessor.max = positionMax; }
       completed += position.accessor.count;
-      progress('geometry', 0.12 + 0.68 * completed / vertexCount, `Baked ${completed.toLocaleString()} of ${vertexCount.toLocaleString()} vertices`, stats);
+      progress('geometry', 0.16 + 0.68 * completed / vertexCount, `Baked ${completed.toLocaleString()} of ${vertexCount.toLocaleString()} vertices`, stats);
     }
   }
 
-  const repair = repairDetachedSkeletons(json, nodes, skins, skinInfos, worlds);
-  if (repair.reconnectedSkins) {
-    stats.reconnectedSkins = repair.reconnectedSkins;
-    stats.remappedJoints = repair.remappedJoints;
-    progress('bind-poses', 0.82, `Reconnected ${repair.reconnectedSkins} detached skin${repair.reconnectedSkins === 1 ? '' : 's'} to the humanoid rig`, stats);
-  }
-
   progress('bind-poses', 0.84, 'Writing clean inverse bind matrices', stats);
-  const repairedWorlds = buildHierarchy(nodes).worlds;
   const writtenBinds = new Map<number, string>();
   skinInfos.forEach(info => {
-    const cleanBinds = info.joints.map(joint => invert(repairedWorlds[joint]));
+    const cleanBinds = info.joints.map(joint => invert(worlds[joint]));
     const signature = JSON.stringify(cleanBinds);
     const previous = writtenBinds.get(info.inverseBindAccessor);
     if (previous && previous !== signature) fail('SHARED_BIND_POSES', 'Multiple skins share incompatible inverse bind matrix storage.');
